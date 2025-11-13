@@ -37,13 +37,13 @@ print("="*70 + "\n")
 
 # Task definition
 task = Task(
-    id="nextjs-getting-started",
+    id="nextjs-data-fetching",
     library_name="Next.js",
     library_version="14.0",
     repo_url="https://github.com/vercel/next.js",
     branch="canary",
     docs_folder="docs",
-    target_doc="01-app/01-getting-started/01-installation.mdx",
+    target_doc="01-app/01-getting-started/07-fetching-data.mdx",
     validation=TaskValidation(type="command", command="npm run dev", port=3000, timeout=60)
 )
 

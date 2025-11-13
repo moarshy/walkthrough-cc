@@ -23,6 +23,29 @@
       }
     },
     {
+      "id": "nextjs-data-fetching",
+      "library_name": "Next.js",
+      "library_version": "14.0",
+      "repo_url": "https://github.com/vercel/next.js",
+      "branch": "canary",
+      "docs_folder": "docs",
+      "target_doc": "01-app/01-getting-started/07-fetching-data.mdx",
+      "validation": {
+        "type": "server",
+        "command": "npm run dev",
+        "port": 3000,
+        "timeout": 60,
+        "success_pattern": "Ready",
+        "description": "Build a data-fetching component and start dev server"
+      },
+      "metadata": {
+        "category": "web-framework",
+        "language": "typescript",
+        "difficulty": "hard",
+        "description": "Build a data-fetching component following Next.js data fetching patterns"
+      }
+    },
+    {
       "id": "react-tutorial",
       "library_name": "React",
       "library_version": "18.3",

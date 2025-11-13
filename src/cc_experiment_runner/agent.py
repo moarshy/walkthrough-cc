@@ -305,8 +305,30 @@ def main():
         print("ERROR: ANTHROPIC_API_KEY not set", file=sys.stderr)
         return 1
 
+    # Setup logging paths (mounted at /logs in container)
+    log_dir = Path("/logs")
+    log_file = log_dir / f"{agent_type}_agent.log"
+    tools_log_file = log_dir / "tools.jsonl"
+    messages_log_file = log_dir / f"{agent_type}_messages.jsonl"
+
+    # Create logger
+    logger = AgentLogger(
+        log_file=log_file,
+        tools_log_file=tools_log_file,
+        messages_log_file=messages_log_file
+    )
+
     # Run agent
-    exit_code = asyncio.run(run_agent(agent_type))
+    exit_code = asyncio.run(run_agent(agent_type, logger))
+
+    # Save metrics
+    metrics_file = log_dir / "metrics.json"
+    with open(metrics_file, 'w') as f:
+        stats = logger.get_stats()
+        stats['agent_type'] = agent_type
+        stats['exit_code'] = exit_code
+        json.dump(stats, f, indent=2)
+
     return exit_code
 
 
