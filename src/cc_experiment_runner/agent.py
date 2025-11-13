@@ -23,6 +23,7 @@ try:
         ClaudeAgentOptions,
         AssistantMessage,
         UserMessage,
+        ResultMessage,
         TextBlock,
     )
 except ImportError as e:
@@ -143,12 +144,20 @@ Execute each step carefully, validate your work, and report the results.
 # AGENT EXECUTION
 # ============================================================================
 
-async def run_agent(agent_type: Literal["vanilla", "walkthrough"]) -> int:
+async def run_agent(
+    agent_type: Literal["vanilla", "walkthrough"],
+    logger: AgentLogger
+):
     """
-    Run the agent.
+    Run the agent (matching setupbench-cc architecture).
+
+    Args:
+        agent_type: Type of agent to run ("vanilla" or "walkthrough")
+        logger: AgentLogger instance to use for logging (passed from caller)
 
     Returns:
-        Exit code (0 = success, non-zero = failure)
+        Token usage dictionary with keys: input_tokens, output_tokens,
+        cache_creation_input_tokens, cache_read_input_tokens, total_tokens
     """
     # Get environment variables
     task_id = os.getenv('TASK_ID', 'unknown')
@@ -161,14 +170,6 @@ async def run_agent(agent_type: Literal["vanilla", "walkthrough"]) -> int:
     print(f"   Library: {library_name} v{library_version}")
     print(f"   Target doc: {target_doc}")
 
-    # Setup logging with comprehensive hooks
-    log_dir = Path('/workspace/logs')
-    log_dir.mkdir(parents=True, exist_ok=True)
-
-    logger = AgentLogger(
-        log_file=log_dir / "agent.log",
-        tools_log_file=log_dir / "tools.jsonl"
-    )
     logger.log_message(f"Agent started: {agent_type}")
     logger.log_message(f"Task: {task_id}")
 
@@ -202,29 +203,75 @@ async def run_agent(agent_type: Literal["vanilla", "walkthrough"]) -> int:
     try:
         async with ClaudeSDKClient(options=options) as client:
             logger.log_message("Sending initial prompt")
-            # Note: Messages are now automatically logged by hooks
+
+            # Log user message
+            logger.log_conversation_message("user", user_prompt)
 
             # Send initial prompt
-            await client.query(user_prompt)
+            response = await client.query(user_prompt)
 
             # Receive and process responses
-            # Note: Hooks automatically log all tool calls (PreToolUse/PostToolUse)
             async for message in client.receive_response():
                 if isinstance(message, AssistantMessage):
+                    # Log assistant message
+                    message_content = []
                     for block in message.content:
                         if isinstance(block, TextBlock):
                             text = block.text
                             print(f"Assistant: {text[:100]}...")
-                            # Messages and tool calls are logged by hooks
+                            message_content.append({"type": "text", "text": text})
+                        else:
+                            # Handle tool use blocks
+                            message_content.append({"type": "ToolUseBlock", "data": str(block)})
+
+                    logger.log_conversation_message("assistant", message_content)
+
+                elif isinstance(message, ResultMessage):
+                    # Extract token usage from ResultMessage (like setupbench-cc)
+                    if message.usage:
+                        usage = message.usage
+                        # Track all token types
+                        input_tokens = usage.get("input_tokens", 0)
+                        output_tokens = usage.get("output_tokens", 0)
+                        cache_creation = usage.get("cache_creation_input_tokens", 0)
+                        cache_read = usage.get("cache_read_input_tokens", 0)
+
+                        logger.track_tokens(
+                            input_tokens=input_tokens,
+                            output_tokens=output_tokens,
+                            cache_creation_input_tokens=cache_creation,
+                            cache_read_input_tokens=cache_read
+                        )
+
+                        logger.log_message(
+                            f"Token usage: input={input_tokens}, output={output_tokens}, "
+                            f"cache_creation={cache_creation}, cache_read={cache_read}"
+                        )
 
             logger.log_message("Agent completed successfully")
             print("✅ Agent completed successfully")
-            return 0
+
+            # Return token usage stats (like setupbench-cc)
+            stats = logger.get_stats()
+            return {
+                "input_tokens": stats.get("input_tokens", 0),
+                "output_tokens": stats.get("output_tokens", 0),
+                "cache_creation_input_tokens": stats.get("cache_creation_input_tokens", 0),
+                "cache_read_input_tokens": stats.get("cache_read_input_tokens", 0),
+                "total_tokens": stats.get("total_tokens", 0)
+            }
 
     except KeyboardInterrupt:
         logger.log_message("Agent interrupted by user", level="WARNING")
         print("⚠️  Agent interrupted")
-        return 130
+        return {
+            "input_tokens": 0,
+            "output_tokens": 0,
+            "cache_creation_input_tokens": 0,
+            "cache_read_input_tokens": 0,
+            "total_tokens": 0,
+            "error": "interrupted"
+        }
 
     except Exception as e:
         error_msg = f"Agent failed: {e}"
@@ -232,7 +279,14 @@ async def run_agent(agent_type: Literal["vanilla", "walkthrough"]) -> int:
         print(f"❌ {error_msg}", file=sys.stderr)
         import traceback
         traceback.print_exc()
-        return 1
+        return {
+            "input_tokens": 0,
+            "output_tokens": 0,
+            "cache_creation_input_tokens": 0,
+            "cache_read_input_tokens": 0,
+            "total_tokens": 0,
+            "error": str(e)
+        }
 
 
 def main():

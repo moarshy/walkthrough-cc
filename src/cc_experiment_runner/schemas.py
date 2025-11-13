@@ -45,12 +45,12 @@ class Task(BaseModel):
 # ============================================================================
 
 class TokenUsage(BaseModel):
-    """Token usage for an agent run."""
+    """Token usage for an agent run (matching setupbench-cc)."""
     total_tokens: int = 0
     input_tokens: int = 0
     output_tokens: int = 0
-    cache_read_tokens: int = 0
-    cache_creation_tokens: int = 0
+    cache_creation_input_tokens: int = 0
+    cache_read_input_tokens: int = 0
 
 
 class ToolCallStats(BaseModel):
@@ -62,6 +62,18 @@ class ToolCallStats(BaseModel):
     edit_calls: int = 0
     glob_calls: int = 0
     grep_calls: int = 0
+
+    # Error tracking
+    total_errors: int = 0
+    bash_errors: int = 0
+    read_errors: int = 0
+    write_errors: int = 0
+    edit_errors: int = 0
+    glob_errors: int = 0
+    grep_errors: int = 0
+
+    # Error details (list of error occurrences)
+    error_details: List[Dict[str, Any]] = Field(default_factory=list)
 
 
 class AgentResult(BaseModel):

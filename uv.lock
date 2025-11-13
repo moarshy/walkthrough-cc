@@ -85,6 +85,40 @@ wheels = [
 ]
 
 [[package]]
+name = "cc-experiment-runner"
+version = "0.1.0"
+source = { editable = "." }
+dependencies = [
+    { name = "anthropic" },
+    { name = "docker" },
+    { name = "gitpython" },
+    { name = "pydantic" },
+    { name = "python-dotenv" },
+]
+
+[package.optional-dependencies]
+dev = [
+    { name = "black" },
+    { name = "mypy" },
+    { name = "pytest" },
+    { name = "ruff" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "anthropic", specifier = ">=0.30.0" },
+    { name = "black", marker = "extra == 'dev'", specifier = ">=23.0.0" },
+    { name = "docker", specifier = ">=6.0.0" },
+    { name = "gitpython", specifier = ">=3.1.0" },
+    { name = "mypy", marker = "extra == 'dev'", specifier = ">=1.0.0" },
+    { name = "pydantic", specifier = ">=2.0.0" },
+    { name = "pytest", marker = "extra == 'dev'", specifier = ">=7.0.0" },
+    { name = "python-dotenv", specifier = ">=1.0.0" },
+    { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.1.0" },
+]
+provides-extras = ["dev"]
+
+[[package]]
 name = "certifi"
 version = "2025.11.12"
 source = { registry = "https://pypi.org/simple" }
@@ -850,37 +884,3 @@ sdist = { url = "https://files.pythonhosted.org/packages/15/22/9ee70a2574a4f4599
 wheels = [
     { url = "https://files.pythonhosted.org/packages/a7/c2/fe1e52489ae3122415c51f387e221dd0773709bad6c6cdaa599e8a2c5185/urllib3-2.5.0-py3-none-any.whl", hash = "sha256:e6b01673c0fa6a13e374b50871808eb3bf7046c4b125b216f6bf1cc604cff0dc", size = 129795, upload-time = "2025-06-18T14:07:40.39Z" },
 ]
-
-[[package]]
-name = "vanilla-cc-walkthrough-cc"
-version = "0.1.0"
-source = { editable = "." }
-dependencies = [
-    { name = "anthropic" },
-    { name = "docker" },
-    { name = "gitpython" },
-    { name = "pydantic" },
-    { name = "python-dotenv" },
-]
-
-[package.optional-dependencies]
-dev = [
-    { name = "black" },
-    { name = "mypy" },
-    { name = "pytest" },
-    { name = "ruff" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "anthropic", specifier = ">=0.30.0" },
-    { name = "black", marker = "extra == 'dev'", specifier = ">=23.0.0" },
-    { name = "docker", specifier = ">=6.0.0" },
-    { name = "gitpython", specifier = ">=3.1.0" },
-    { name = "mypy", marker = "extra == 'dev'", specifier = ">=1.0.0" },
-    { name = "pydantic", specifier = ">=2.0.0" },
-    { name = "pytest", marker = "extra == 'dev'", specifier = ">=7.0.0" },
-    { name = "python-dotenv", specifier = ">=1.0.0" },
-    { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.1.0" },
-]
-provides-extras = ["dev"]

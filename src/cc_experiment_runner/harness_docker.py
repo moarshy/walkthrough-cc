@@ -23,7 +23,7 @@ class DockerHarness:
 
     def __init__(
         self,
-        image_name: str = "cc-experiment:latest",
+        image_name: str = "cc-experiment-runner:latest",
         mem_limit: str = "8g",
         cpu_count: int = 4,
         timeout_seconds: int = 7200
@@ -89,7 +89,7 @@ class DockerHarness:
         volumes = {
             str(repo_path.absolute()): {'bind': '/workspace/repo', 'mode': 'rw'},
             str(docs_path.absolute()): {'bind': '/workspace/docs', 'mode': 'ro'},
-            str(log_dir.absolute()): {'bind': '/workspace/logs', 'mode': 'rw'},
+            str(log_dir.absolute()): {'bind': '/logs', 'mode': 'rw'},
         }
 
         # Add walkthrough for walkthrough agent
@@ -99,14 +99,19 @@ class DockerHarness:
                 'mode': 'ro'
             }
 
-        # Setup environment
+        # Prepare task JSON for container
+        task_json = json.dumps({
+            'id': task.id,
+            'library_name': task.library_name,
+            'library_version': task.library_version,
+            'target_doc': task.target_doc,
+            'repo_url': task.repo_url,
+            'branch': task.branch,
+            'docs_folder': task.docs_folder
+        })
+
+        # Setup environment (minimal - most passed via command args)
         environment = {
-            'ANTHROPIC_API_KEY': self.api_key,
-            'TASK_ID': task.id,
-            'AGENT_TYPE': agent_type,
-            'TARGET_DOC': task.target_doc,
-            'LIBRARY_NAME': task.library_name,
-            'LIBRARY_VERSION': task.library_version,
             'NODE_PATH': '/usr/local/lib/node_modules',
             'PYTHONUNBUFFERED': '1',
         }
@@ -114,9 +119,10 @@ class DockerHarness:
         container = None
         try:
             # Create and start container
+            # Command: python3 /app/run_agent_in_container.py <agent_type> '<task_json>' '<api_key>'
             container = self.docker_client.containers.run(
                 image=self.image_name,
-                command=['python3', '/agent_wrapper/run_agent.py', agent_type],
+                command=['python3', '/app/run_agent_in_container.py', agent_type, task_json, self.api_key],
                 volumes=volumes,
                 environment=environment,
                 mem_limit=self.mem_limit,
@@ -211,7 +217,7 @@ class DockerHarness:
             return 124  # Timeout exit code
 
     def _parse_agent_logs(self, log_dir: Path) -> tuple[TokenUsage, ToolCallStats]:
-        """Parse token usage and tool calls from agent logs."""
+        """Parse token usage and tool calls from agent logs (matching setupbench-cc)."""
         token_usage = TokenUsage()
         tool_calls = ToolCallStats()
 
@@ -242,36 +248,61 @@ class DockerHarness:
                         elif 'grep' in tool_name:
                             tool_calls.grep_calls += 1
 
+                        # Track errors
+                        error = tool_event.get('error')
+                        if error is not None:
+                            tool_calls.total_errors += 1
+
+                            # Increment tool-specific error counter
+                            if 'bash' in tool_name:
+                                tool_calls.bash_errors += 1
+                            elif 'read' in tool_name:
+                                tool_calls.read_errors += 1
+                            elif 'write' in tool_name:
+                                tool_calls.write_errors += 1
+                            elif 'edit' in tool_name:
+                                tool_calls.edit_errors += 1
+                            elif 'glob' in tool_name:
+                                tool_calls.glob_errors += 1
+                            elif 'grep' in tool_name:
+                                tool_calls.grep_errors += 1
+
+                            # Store error details
+                            error_detail = {
+                                "tool": tool_event.get('tool_name', tool_name),
+                                "error": str(error),
+                                "timestamp": tool_event.get('timestamp'),
+                                "tool_use_id": tool_event.get('tool_use_id')
+                            }
+                            tool_calls.error_details.append(error_detail)
+
             except Exception as e:
                 logger.warning(f"Failed to parse tools.jsonl: {e}")
 
-        # Try to parse messages.jsonl for token usage
-        messages_file = log_dir / "messages.jsonl"
-        if messages_file.exists():
+        # Read token usage from metrics.json (like setupbench-cc)
+        metrics_file = log_dir / "metrics.json"
+        if metrics_file.exists():
             try:
-                with open(messages_file, 'r') as f:
-                    for line in f:
-                        if not line.strip():
-                            continue
-                        msg = json.loads(line)
+                with open(metrics_file, 'r') as f:
+                    metrics = json.load(f)
 
-                        # Look for usage information
-                        usage = msg.get('usage', {})
-                        if usage:
-                            token_usage.input_tokens += usage.get('input_tokens', 0)
-                            token_usage.output_tokens += usage.get('output_tokens', 0)
-                            token_usage.cache_read_tokens += usage.get('cache_read_input_tokens', 0)
-                            token_usage.cache_creation_tokens += usage.get('cache_creation_input_tokens', 0)
+                token_usage.input_tokens = metrics.get('input_tokens', 0)
+                token_usage.output_tokens = metrics.get('output_tokens', 0)
+                token_usage.cache_creation_input_tokens = metrics.get('cache_creation_input_tokens', 0)
+                token_usage.cache_read_input_tokens = metrics.get('cache_read_input_tokens', 0)
+                token_usage.total_tokens = metrics.get('total_tokens', 0)
 
             except Exception as e:
-                logger.warning(f"Failed to parse messages.jsonl: {e}")
+                logger.warning(f"Failed to parse metrics.json: {e}")
 
-        # Calculate total tokens
-        token_usage.total_tokens = (
-            token_usage.input_tokens +
-            token_usage.output_tokens +
-            token_usage.cache_creation_tokens
-        )
+        # If metrics.json doesn't exist or failed, calculate total from components
+        if token_usage.total_tokens == 0:
+            token_usage.total_tokens = (
+                token_usage.input_tokens +
+                token_usage.output_tokens +
+                token_usage.cache_creation_input_tokens +
+                token_usage.cache_read_input_tokens
+            )
 
         return token_usage, tool_calls
 

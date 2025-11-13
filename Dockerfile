@@ -29,8 +29,8 @@ RUN pip3 install --no-cache-dir \
     python-dotenv \
     pydantic
 
-# Copy vanilla_cc_runner package
-COPY src/vanilla_cc_runner /app/vanilla_cc_runner
+# Copy cc_experiment_runner package
+COPY src/cc_experiment_runner /app/cc_experiment_runner
 
 # Copy in-container agent script
 COPY scripts/run_agent_in_container.py /app/run_agent_in_container.py

@@ -27,30 +27,48 @@ class ToolLogEntry:
 class AgentLogger:
     """Logger for agent execution, including messages and tool calls."""
 
-    def __init__(self, log_file: Path, tools_log_file: Path):
+    def __init__(self, log_file: Path, tools_log_file: Path, messages_log_file: Path):
         """
         Initialize the agent logger.
 
         Args:
             log_file: Path to the agent message log file
             tools_log_file: Path to the tools JSONL log file
+            messages_log_file: Path to the messages JSONL log file
         """
         self.log_file = Path(log_file)
         self.tools_log_file = Path(tools_log_file)
+        self.messages_log_file = Path(messages_log_file)
 
         # Ensure parent directories exist
         self.log_file.parent.mkdir(parents=True, exist_ok=True)
         self.tools_log_file.parent.mkdir(parents=True, exist_ok=True)
+        self.messages_log_file.parent.mkdir(parents=True, exist_ok=True)
 
         # Initialize log files
         self.log_file.touch(exist_ok=True)
         self.tools_log_file.touch(exist_ok=True)
+        self.messages_log_file.touch(exist_ok=True)
 
-        # Track statistics
+        # Track statistics (matching setupbench-cc + error tracking)
         self.stats = {
             "tool_calls": 0,
             "messages_logged": 0,
-            "errors": 0
+            "errors": 0,
+            "input_tokens": 0,
+            "output_tokens": 0,
+            "cache_creation_input_tokens": 0,
+            "cache_read_input_tokens": 0,
+            "total_tokens": 0,
+            # Error tracking by tool type
+            "total_tool_errors": 0,
+            "bash_errors": 0,
+            "read_errors": 0,
+            "write_errors": 0,
+            "edit_errors": 0,
+            "glob_errors": 0,
+            "grep_errors": 0,
+            "error_details": []  # List of error dicts
         }
 
     def log_message(self, message: str, level: str = "INFO"):
@@ -81,8 +99,78 @@ class AgentLogger:
 
         self.stats["tool_calls"] += 1
 
+        # Track errors by tool type
         if entry.error:
             self.stats["errors"] += 1
+            self.stats["total_tool_errors"] += 1
+
+            # Increment tool-specific error counter
+            tool_name = entry.tool_name.lower()
+            if 'bash' in tool_name:
+                self.stats["bash_errors"] += 1
+            elif 'read' in tool_name:
+                self.stats["read_errors"] += 1
+            elif 'write' in tool_name:
+                self.stats["write_errors"] += 1
+            elif 'edit' in tool_name:
+                self.stats["edit_errors"] += 1
+            elif 'glob' in tool_name:
+                self.stats["glob_errors"] += 1
+            elif 'grep' in tool_name:
+                self.stats["grep_errors"] += 1
+
+            # Store error details
+            error_detail = {
+                "tool": entry.tool_name,
+                "error": str(entry.error),
+                "timestamp": entry.timestamp,
+                "tool_use_id": entry.tool_use_id
+            }
+            self.stats["error_details"].append(error_detail)
+
+    def log_conversation_message(self, role: str, content: Any):
+        """
+        Log a conversation message to messages.jsonl.
+
+        Args:
+            role: Message role ('user' or 'assistant')
+            content: Message content (can be string, list of blocks, etc.)
+        """
+        message_entry = {
+            "timestamp": datetime.now().isoformat(),
+            "role": role,
+            "content": content
+        }
+
+        with open(self.messages_log_file, 'a') as f:
+            f.write(json.dumps(message_entry) + '\n')
+
+        self.stats["messages_logged"] += 1
+
+    def track_tokens(
+        self,
+        input_tokens: int = 0,
+        output_tokens: int = 0,
+        cache_creation_input_tokens: int = 0,
+        cache_read_input_tokens: int = 0
+    ):
+        """
+        Track token usage (matching setupbench-cc).
+
+        Args:
+            input_tokens: Number of input tokens used
+            output_tokens: Number of output tokens used
+            cache_creation_input_tokens: Tokens used for cache creation
+            cache_read_input_tokens: Tokens read from cache
+        """
+        self.stats["input_tokens"] += input_tokens
+        self.stats["output_tokens"] += output_tokens
+        self.stats["cache_creation_input_tokens"] += cache_creation_input_tokens
+        self.stats["cache_read_input_tokens"] += cache_read_input_tokens
+        self.stats["total_tokens"] += (
+            input_tokens + output_tokens +
+            cache_creation_input_tokens + cache_read_input_tokens
+        )
 
     def get_stats(self) -> Dict[str, int]:
         """Get logging statistics."""
