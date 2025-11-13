@@ -17,8 +17,8 @@ from pathlib import Path
 from typing import Literal
 from datetime import datetime
 
-# Ensure example-codes is in path for reusing hooks
-sys.path.insert(0, '/agent_wrapper/hooks')
+# Add agent_wrapper to path for imports
+sys.path.insert(0, '/agent_wrapper')
 
 try:
     from claude_agent_sdk import (
@@ -28,9 +28,12 @@ try:
         UserMessage,
         TextBlock,
     )
+    from hooks.logging import AgentLogger, create_logging_hooks
 except ImportError as e:
-    print(f"ERROR: Failed to import claude_agent_sdk: {e}", file=sys.stderr)
-    print("Make sure Claude Code CLI is installed", file=sys.stderr)
+    print(f"ERROR: Failed to import claude_agent_sdk or hooks: {e}", file=sys.stderr)
+    print("Make sure Claude Code CLI and hooks are installed", file=sys.stderr)
+    import traceback
+    traceback.print_exc()
     sys.exit(1)
 
 
@@ -134,47 +137,8 @@ Execute each step carefully, validate your work, and report the results.
 """
 
 
-# ============================================================================
-# LOGGING
-# ============================================================================
-
-class SimpleLogger:
-    """Simple logger for agent execution."""
-
-    def __init__(self, log_dir: Path):
-        self.log_dir = Path(log_dir)
-        self.log_dir.mkdir(parents=True, exist_ok=True)
-
-        self.messages_file = self.log_dir / "messages.jsonl"
-        self.tools_file = self.log_dir / "tools.jsonl"
-        self.agent_log = self.log_dir / "agent.log"
-
-    def log_message(self, role: str, content: str):
-        """Log a message."""
-        entry = {
-            "timestamp": datetime.now().isoformat(),
-            "role": role,
-            "content": content[:500]  # Truncate long messages
-        }
-        with open(self.messages_file, 'a') as f:
-            f.write(json.dumps(entry) + '\n')
-
-    def log_tool(self, tool_name: str, args: dict, result: str = None):
-        """Log a tool call."""
-        entry = {
-            "timestamp": datetime.now().isoformat(),
-            "tool": tool_name,
-            "args": str(args)[:200],  # Truncate
-            "result": str(result)[:200] if result else None
-        }
-        with open(self.tools_file, 'a') as f:
-            f.write(json.dumps(entry) + '\n')
-
-    def log_text(self, message: str):
-        """Log to agent.log."""
-        timestamp = datetime.now().isoformat()
-        with open(self.agent_log, 'a') as f:
-            f.write(f"[{timestamp}] {message}\n")
+# Note: We use the comprehensive logging hooks from example-codes/hooks/logging.py
+# which provides PreToolUse and PostToolUse hooks with detailed tool parameter logging
 
 
 # ============================================================================
@@ -199,10 +163,16 @@ async def run_agent(agent_type: Literal["vanilla", "walkthrough"]) -> int:
     print(f"   Library: {library_name} v{library_version}")
     print(f"   Target doc: {target_doc}")
 
-    # Setup logging
-    logger = SimpleLogger(Path('/workspace/logs'))
-    logger.log_text(f"Agent started: {agent_type}")
-    logger.log_text(f"Task: {task_id}")
+    # Setup logging with comprehensive hooks
+    log_dir = Path('/workspace/logs')
+    log_dir.mkdir(parents=True, exist_ok=True)
+
+    logger = AgentLogger(
+        log_file=log_dir / "agent.log",
+        tools_log_file=log_dir / "tools.jsonl"
+    )
+    logger.log_message(f"Agent started: {agent_type}")
+    logger.log_message(f"Task: {task_id}")
 
     # Prepare prompts
     if agent_type == "vanilla":
@@ -219,46 +189,48 @@ async def run_agent(agent_type: Literal["vanilla", "walkthrough"]) -> int:
         )
         user_prompt = WALKTHROUGH_USER_PROMPT
 
-    # Configure Claude SDK
+    # Create logging hooks
+    hooks = create_logging_hooks(logger)
+
+    # Configure Claude SDK with hooks
     options = ClaudeAgentOptions(
         system_prompt=system_prompt,
         allowed_tools=["Read", "Write", "Edit", "Bash", "Glob", "Grep"],
         permission_mode="acceptEdits",
-        cwd="/workspace/repo"
+        cwd="/workspace/repo",
+        hooks=hooks  # Add comprehensive logging hooks
     )
 
     try:
         async with ClaudeSDKClient(options=options) as client:
-            logger.log_text("Sending initial prompt")
-            logger.log_message("user", user_prompt)
+            logger.log_message("Sending initial prompt")
+            # Note: Messages are now automatically logged by hooks
 
             # Send initial prompt
             await client.query(user_prompt)
 
             # Receive and process responses
+            # Note: Hooks automatically log all tool calls (PreToolUse/PostToolUse)
             async for message in client.receive_response():
                 if isinstance(message, AssistantMessage):
                     for block in message.content:
                         if isinstance(block, TextBlock):
                             text = block.text
                             print(f"Assistant: {text[:100]}...")
-                            logger.log_message("assistant", text)
+                            # Messages and tool calls are logged by hooks
 
-                # TODO: Hook into tool calls for better logging
-                # For now, we rely on the SDK's built-in logging
-
-            logger.log_text("Agent completed successfully")
+            logger.log_message("Agent completed successfully")
             print("✅ Agent completed successfully")
             return 0
 
     except KeyboardInterrupt:
-        logger.log_text("Agent interrupted by user")
+        logger.log_message("Agent interrupted by user", level="WARNING")
         print("⚠️  Agent interrupted")
         return 130
 
     except Exception as e:
         error_msg = f"Agent failed: {e}"
-        logger.log_text(error_msg)
+        logger.log_message(error_msg, level="ERROR")
         print(f"❌ {error_msg}", file=sys.stderr)
         import traceback
         traceback.print_exc()
