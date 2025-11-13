@@ -23,12 +23,20 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 # Add example-codes to path
 project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root / "example-codes"))
+sys.path.insert(0, str(project_root / "src"))
 
-from repository.manager import RepositoryManager
+# Import from example-codes (no relative imports)
+import sys
+sys.path.insert(0, str(project_root / "example-codes"))
+from repository import manager as repo_manager_module
 from walkthrough_generate_agent import WalkthroughGenerateAgent
 
+# Import from src
 from .schemas import Task, TaskResult, ExperimentResults, TokenUsage
 from .harness_docker import DockerHarness
+
+# Alias for cleaner code
+RepositoryManager = repo_manager_module.RepositoryManager
 
 logging.basicConfig(
     level=logging.INFO,

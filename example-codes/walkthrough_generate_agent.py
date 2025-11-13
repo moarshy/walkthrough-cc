@@ -20,7 +20,7 @@ from claude_agent_sdk import (
     HookMatcher,
 )
 
-from .schemas import (
+from schemas import (
     ContentFields,
     WalkthroughStep,
     WalkthroughMetadata,
@@ -28,8 +28,8 @@ from .schemas import (
     WalkthroughExport,
 )
 
-from stackbench.hooks.validation import create_walkthrough_generation_validation_hook
-from stackbench.hooks.logging import create_logging_hooks, AgentLogger
+from hooks.validation import create_walkthrough_generation_validation_hook
+from hooks.logging import create_logging_hooks, AgentLogger
 
 from dotenv import load_dotenv, find_dotenv
 load_dotenv(find_dotenv())

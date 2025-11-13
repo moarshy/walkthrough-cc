@@ -27,8 +27,8 @@ from datetime import datetime
 # Add src to path
 sys.path.insert(0, str(Path(__file__).parent))
 
-from src.schemas import Task
-from src.runner import ExperimentRunner
+from cc_experiment.schemas import Task
+from cc_experiment.runner import ExperimentRunner
 
 # Colors for terminal output
 GREEN = '\033[92m'

@@ -17,9 +17,6 @@ from pathlib import Path
 from typing import Literal
 from datetime import datetime
 
-# Add agent_wrapper to path for imports
-sys.path.insert(0, '/agent_wrapper')
-
 try:
     from claude_agent_sdk import (
         ClaudeSDKClient,
@@ -28,13 +25,14 @@ try:
         UserMessage,
         TextBlock,
     )
-    from hooks.logging import AgentLogger, create_logging_hooks
 except ImportError as e:
-    print(f"ERROR: Failed to import claude_agent_sdk or hooks: {e}", file=sys.stderr)
-    print("Make sure Claude Code CLI and hooks are installed", file=sys.stderr)
+    print(f"ERROR: Failed to import claude_agent_sdk: {e}", file=sys.stderr)
+    print("Make sure Claude Code CLI is installed", file=sys.stderr)
     import traceback
     traceback.print_exc()
     sys.exit(1)
+
+from .agent_hooks import AgentLogger, create_logging_hooks
 
 
 # ============================================================================
@@ -137,7 +135,7 @@ Execute each step carefully, validate your work, and report the results.
 """
 
 
-# Note: We use the comprehensive logging hooks from example-codes/hooks/logging.py
+# Note: We use comprehensive logging hooks (from agent_hooks.py, extracted from example-codes)
 # which provides PreToolUse and PostToolUse hooks with detailed tool parameter logging
 
 
