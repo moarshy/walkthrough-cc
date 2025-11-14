@@ -1,0 +1,26 @@
+{
+  "tool_calls": 161,
+  "messages_logged": 304,
+  "errors": 0,
+  "input_tokens": 45,
+  "output_tokens": 18622,
+  "cache_creation_input_tokens": 114941,
+  "cache_read_input_tokens": 5933389,
+  "total_tokens": 6066997,
+  "total_tool_errors": 0,
+  "bash_errors": 0,
+  "read_errors": 0,
+  "write_errors": 0,
+  "edit_errors": 0,
+  "glob_errors": 0,
+  "grep_errors": 0,
+  "error_details": [],
+  "agent_type": "walkthrough",
+  "exit_code": {
+    "input_tokens": 45,
+    "output_tokens": 18622,
+    "cache_creation_input_tokens": 114941,
+    "cache_read_input_tokens": 5933389,
+    "total_tokens": 6066997
+  }
+}

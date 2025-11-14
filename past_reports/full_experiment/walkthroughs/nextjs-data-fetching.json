@@ -1,0 +1,243 @@
+{
+  "version": "1.0",
+  "exportedAt": "2025-11-13T14:44:52.577Z",
+  "walkthrough": {
+    "title": "Fetching Data in Next.js",
+    "description": "Learn how to fetch data in Server and Client Components, implement streaming, and optimize data fetching patterns in Next.js applications.",
+    "type": "quickstart",
+    "status": "published",
+    "createdAt": 1763016292577,
+    "updatedAt": 1763016292577,
+    "estimatedDurationMinutes": 45,
+    "tags": [
+      "Next.js",
+      "data-fetching",
+      "server-components",
+      "streaming"
+    ],
+    "metadata": null
+  },
+  "steps": [
+    {
+      "title": "Set Up a Next.js Project",
+      "contentFields": {
+        "version": "v1",
+        "contentForUser": "# Set Up a Next.js Project\n\nBefore exploring data fetching, you need a Next.js project. If you don't have one already, create it now.\n\n```bash\npnpx create-next-app@latest my-nextjs-app\ncd my-nextjs-app\n```\n\nWhen prompted, accept the default options including:\n- \u2705 TypeScript\n- \u2705 ESLint\n- \u2705 Tailwind CSS\n- \u2705 App Router\n- \u2705 Turbopack\n\nThis walkthrough focuses on the App Router architecture introduced in Next.js 13+.",
+        "contextForAgent": "Next.js has two routing systems: the Pages Router (legacy) and the App Router (recommended). This tutorial focuses on the App Router which uses the 'app' directory. The App Router introduces Server Components by default, which is fundamental to understanding data fetching patterns in this guide. Server Components run only on the server and can directly access databases and APIs without exposing credentials to the client.",
+        "operationsForAgent": "1. Check if a Next.js project exists in the current directory by looking for 'next.config.js' or 'next.config.ts'\n2. If no project exists, run: npx create-next-app@latest my-nextjs-app\n3. Navigate into the project directory: cd my-nextjs-app\n4. Verify the setup by checking for the 'app' directory (App Router) and 'package.json'\n5. Check that dependencies are installed; if not, run: npm install\n6. Success indicators: 'app' directory exists, 'package.json' contains 'next' as a dependency",
+        "introductionForAgent": "This step ensures you have a working Next.js project with the App Router enabled, which is required for following the data fetching patterns demonstrated in this tutorial."
+      },
+      "displayOrder": 0,
+      "createdAt": 1763016292577,
+      "updatedAt": 1763016292577,
+      "metadata": {
+        "imported": true
+      },
+      "nextStepReference": 1
+    },
+    {
+      "title": "Fetch Data in a Server Component with fetch API",
+      "contentFields": {
+        "version": "v1",
+        "contentForUser": "# Fetch Data in a Server Component\n\nServer Components in Next.js can fetch data directly using async/await. Let's create a blog page that fetches posts from an API.\n\nCreate `app/blog/page.tsx` with the following code:\n\n```tsx\nexport default async function Page() {\n  const data = await fetch('https://api.vercel.app/blog')\n  const posts = await data.json()\n  return (\n    <ul>\n      {posts.map((post) => (\n        <li key={post.id}>{post.title}</li>\n      ))}\n    </ul>\n  )\n}\n```\n\n**Key Points:**\n- Components are `async` by default in the App Router\n- `fetch` responses are not cached by default but the route output is pre-rendered\n- No need for `useEffect` or client-side data fetching libraries\n\nTest it by running:\n```bash\nnpm run dev\n```\n\nVisit `http://localhost:3000/blog` to see the fetched posts.",
+        "contextForAgent": "Server Components are a key feature of Next.js App Router. They run exclusively on the server during the build process or on each request. This means: (1) No JavaScript is sent to the client for Server Components, (2) You can safely access databases, filesystems, and APIs with credentials, (3) The fetch API in Server Components has special caching behaviors. By default, Next.js pre-renders routes for performance, but you can opt into dynamic rendering with { cache: 'no-store' }. The component being async is what enables this server-side data fetching pattern.",
+        "operationsForAgent": "1. Create the directory structure: mkdir -p app/blog\n2. Create the file: app/blog/page.tsx\n3. Write the Server Component code that fetches from 'https://api.vercel.app/blog'\n4. Ensure the component is exported as default and is async\n5. Start the development server: npm run dev (or use existing dev server)\n6. Wait for compilation to complete (watch for 'compiled successfully' message)\n7. Verify the page works by checking http://localhost:3000/blog\n8. Success indicators: Page loads, shows a list of blog post titles, no errors in console or terminal\n9. If there are fetch errors, they will appear in the server terminal, not the browser console",
+        "introductionForAgent": "This step demonstrates the fundamental pattern for fetching data in Server Components using the fetch API. You'll create your first async Server Component that retrieves and displays data from an external API."
+      },
+      "displayOrder": 1,
+      "createdAt": 1763016292577,
+      "updatedAt": 1763016292577,
+      "metadata": {
+        "imported": true
+      },
+      "nextStepReference": 2
+    },
+    {
+      "title": "Fetch Data with an ORM or Database",
+      "contentFields": {
+        "version": "v1",
+        "contentForUser": "# Fetch Data with an ORM or Database\n\nSince Server Components run on the server, you can directly query databases. This example uses Drizzle ORM.\n\nFirst, set up the database utilities (simulated for this tutorial):\n\nCreate `lib/db.ts`:\n```tsx\n// Mock database setup for demonstration\nexport const db = {\n  select: () => ({\n    from: (table: any) => Promise.resolve([\n      { id: 1, title: 'First Post' },\n      { id: 2, title: 'Second Post' }\n    ])\n  })\n}\n\nexport const posts = {}\n```\n\nUpdate `app/blog/page.tsx`:\n```tsx\nimport { db, posts } from '@/lib/db'\n\nexport default async function Page() {\n  const allPosts = await db.select().from(posts)\n  return (\n    <ul>\n      {allPosts.map((post) => (\n        <li key={post.id}>{post.title}</li>\n      ))}\n    </ul>\n  )\n}\n```\n\n**Important:** In production, you'd install a real ORM (Drizzle, Prisma) and configure a database connection.",
+        "contextForAgent": "Server Components can safely make database queries because they run on the server where database credentials are secure. Common ORMs include Prisma, Drizzle, and Kysely. The pattern is identical to fetch API: make the component async, await the database call, and return JSX with the data. Database credentials never reach the client. The mock database in this example simulates the pattern without requiring actual database setup. In a real application, you'd have environment variables with connection strings, a proper ORM installation, and database migrations.",
+        "operationsForAgent": "1. Create the lib directory if it doesn't exist: mkdir -p lib\n2. Create lib/db.ts with the mock database implementation provided\n3. Update app/blog/page.tsx to import and use the database instead of fetch\n4. Ensure the import path uses '@/lib/db' (the @ alias typically maps to the project root)\n5. If TypeScript shows path errors, verify tsconfig.json has path mappings configured\n6. Restart the dev server if necessary: stop and run npm run dev again\n7. Check http://localhost:3000/blog still works\n8. Success indicators: Page displays posts from the mock database, no import or compilation errors\n9. Note: This is a simulation; real database setup would require installing an ORM package and configuring connection strings",
+        "introductionForAgent": "This step shows how to fetch data using an ORM or database client instead of the fetch API. You'll create a mock database setup to understand the pattern without needing actual database infrastructure."
+      },
+      "displayOrder": 2,
+      "createdAt": 1763016292577,
+      "updatedAt": 1763016292577,
+      "metadata": {
+        "imported": true
+      },
+      "nextStepReference": 3
+    },
+    {
+      "title": "Stream Data to Client Components with use Hook",
+      "contentFields": {
+        "version": "v1",
+        "contentForUser": "# Stream Data to Client Components\n\nYou can stream data from Server to Client Components using React's `use` hook and Suspense.\n\nFirst, create a data fetching function in `lib/data.ts`:\n```tsx\nexport async function getPosts() {\n  const data = await fetch('https://api.vercel.app/blog')\n  return data.json()\n}\n```\n\nUpdate `app/blog/page.tsx` (Server Component):\n```tsx\nimport Posts from '@/app/ui/posts'\nimport { Suspense } from 'react'\nimport { getPosts } from '@/lib/data'\n\nexport default function Page() {\n  // Don't await - pass the promise directly\n  const posts = getPosts()\n\n  return (\n    <Suspense fallback={<div>Loading...</div>}>\n      <Posts posts={posts} />\n    </Suspense>\n  )\n}\n```\n\nCreate `app/ui/posts.tsx` (Client Component):\n```tsx\n'use client'\nimport { use } from 'react'\n\nexport default function Posts({\n  posts,\n}: {\n  posts: Promise<{ id: string; title: string }[]>\n}) {\n  const allPosts = use(posts)\n\n  return (\n    <ul>\n      {allPosts.map((post) => (\n        <li key={post.id}>{post.title}</li>\n      ))}\n    </ul>\n  )\n}\n```\n\nThe `<Suspense>` boundary shows the fallback while data loads.",
+        "contextForAgent": "React's 'use' hook is a new primitive that unwraps promises. It only works inside Client Components (marked with 'use client'). The pattern here is: (1) Server Component initiates data fetch but doesn't await it, (2) Promise is passed as prop to Client Component, (3) Client Component uses the 'use' hook to unwrap the promise, (4) Suspense boundary wraps the Client Component to show fallback UI while loading. This enables streaming - the Server Component can start rendering immediately, and the data streams to the client as it becomes available. Without Suspense, you'd get an error. The 'use client' directive tells Next.js to create a boundary and send this component's code to the client as JavaScript.",
+        "operationsForAgent": "1. Create lib/data.ts if it doesn't exist with the getPosts function\n2. Create directory for UI components: mkdir -p app/ui\n3. Create app/ui/posts.tsx with the Client Component code (must include 'use client' at the top)\n4. Update app/blog/page.tsx to use the streaming pattern: import Suspense and Posts, call getPosts() without await, wrap Posts in Suspense\n5. Verify imports are correct: getPosts from '@/lib/data', Posts from '@/app/ui/posts'\n6. Check that posts.tsx has 'use client' as the very first line\n7. Reload http://localhost:3000/blog\n8. Success indicators: You should briefly see 'Loading...' before posts appear, no errors about 'use' hook or Suspense\n9. If you see errors about 'use' hook, verify the Client Component has 'use client' directive",
+        "introductionForAgent": "This step introduces streaming data from server to client using React's use hook and Suspense boundaries. You'll create a Client Component that receives a promise from a Server Component and unwraps it client-side."
+      },
+      "displayOrder": 3,
+      "createdAt": 1763016292577,
+      "updatedAt": 1763016292577,
+      "metadata": {
+        "imported": true
+      },
+      "nextStepReference": 4
+    },
+    {
+      "title": "Use SWR for Client-Side Data Fetching",
+      "contentFields": {
+        "version": "v1",
+        "contentForUser": "# Client-Side Data Fetching with SWR\n\nFor client-side data fetching, you can use libraries like SWR or React Query. Let's implement SWR.\n\nInstall SWR:\n```bash\nnpm install swr\n```\n\nCreate `app/blog-client/page.tsx`:\n```tsx\n'use client'\nimport useSWR from 'swr'\n\nconst fetcher = (url: string) => fetch(url).then((r) => r.json())\n\nexport default function BlogPage() {\n  const { data, error, isLoading } = useSWR(\n    'https://api.vercel.app/blog',\n    fetcher\n  )\n\n  if (isLoading) return <div>Loading...</div>\n  if (error) return <div>Error: {error.message}</div>\n\n  return (\n    <ul>\n      {data.map((post: { id: string; title: string }) => (\n        <li key={post.id}>{post.title}</li>\n      ))}\n    </ul>\n  )\n}\n```\n\nVisit `http://localhost:3000/blog-client` to see SWR in action.\n\n**When to use SWR:**\n- Need real-time data updates\n- Want automatic revalidation\n- Require client-side caching\n- Building interactive dashboards",
+        "contextForAgent": "SWR (Stale-While-Revalidate) is a React Hooks library for client-side data fetching. Unlike Server Components, Client Components run in the browser and need 'use client' directive. SWR provides: (1) Automatic caching, (2) Revalidation on focus, (3) Revalidation on reconnect, (4) Optimistic UI updates, (5) Built-in error handling. This is different from Server Component fetching - SWR runs in the browser, sends requests from the client, and re-renders on data changes. Use Server Components for initial page loads and SEO, use SWR/Client Components for interactive features that need real-time updates. The fetcher function is required by SWR to know how to fetch data.",
+        "operationsForAgent": "1. Install SWR package: npm install swr\n2. Wait for installation to complete (check for 'added' message)\n3. Create directory: mkdir -p app/blog-client\n4. Create app/blog-client/page.tsx with the SWR implementation\n5. Ensure 'use client' is the first line of the file\n6. Verify the fetcher function is defined before the component\n7. Check that useSWR is imported from 'swr'\n8. Navigate to http://localhost:3000/blog-client in browser\n9. Success indicators: Page shows loading state briefly, then displays posts, data updates automatically if API changes\n10. If you see 'useSWR is not a function', verify SWR is installed and imported correctly\n11. Check browser Network tab to see client-side fetch requests (unlike Server Components where fetch happens on server)",
+        "introductionForAgent": "This step demonstrates client-side data fetching using the SWR library. You'll create a Client Component that fetches data in the browser with automatic caching and revalidation features."
+      },
+      "displayOrder": 4,
+      "createdAt": 1763016292577,
+      "updatedAt": 1763016292577,
+      "metadata": {
+        "imported": true
+      },
+      "nextStepReference": 5
+    },
+    {
+      "title": "Implement Page-Level Streaming with loading.js",
+      "contentFields": {
+        "version": "v1",
+        "contentForUser": "# Page-Level Streaming with loading.js\n\nYou can stream an entire page by creating a `loading.js` file alongside your page.\n\nCreate `app/blog/loading.tsx`:\n```tsx\nexport default function Loading() {\n  return (\n    <div className=\"p-4\">\n      <div className=\"animate-pulse\">\n        <div className=\"h-4 bg-gray-200 rounded w-3/4 mb-4\"></div>\n        <div className=\"h-4 bg-gray-200 rounded w-1/2 mb-4\"></div>\n        <div className=\"h-4 bg-gray-200 rounded w-5/6\"></div>\n      </div>\n    </div>\n  )\n}\n```\n\nThis creates a loading skeleton that automatically shows while `app/blog/page.tsx` is fetching data.\n\n**How it works:**\n- `loading.js` automatically wraps your page in a `<Suspense>` boundary\n- Users see the loading UI immediately on navigation\n- Once data is ready, the page content swaps in\n- Great for entire route segments\n\nFor more granular control, use `<Suspense>` directly in your components.",
+        "contextForAgent": "loading.js is a special Next.js file convention that creates automatic Suspense boundaries. When placed in a route folder (e.g., app/blog/loading.js), Next.js automatically: (1) Wraps the page.js in a Suspense boundary, (2) Shows loading.js content during data fetching, (3) Swaps to page.js content when ready. This happens behind the scenes without explicit Suspense imports in page.js. The loading.js file should export a default component with loading UI - commonly skeletons, spinners, or placeholder content. This works well for route-level loading states. For component-level loading, use Suspense directly. The skeleton example uses Tailwind CSS classes (animate-pulse, bg-gray-200) to create a loading animation.",
+        "operationsForAgent": "1. Ensure you're in the app/blog directory context\n2. Create app/blog/loading.tsx alongside the existing page.tsx\n3. Implement the Loading component with skeleton UI (provided code)\n4. The loading.js file should export a default component, no 'use client' needed\n5. To test: Add a delay to your data fetching (e.g., await new Promise(resolve => setTimeout(resolve, 2000)))\n6. Navigate to http://localhost:3000/blog\n7. Success indicators: You should see the skeleton animation briefly before page content loads\n8. The loading state shows during navigation from other pages\n9. Remove the artificial delay after testing\n10. Note: loading.js only shows during server rendering, not for client-side data fetching",
+        "introductionForAgent": "This step shows how to implement page-level streaming using Next.js's loading.js convention. You'll create a loading skeleton that automatically displays while the page fetches data."
+      },
+      "displayOrder": 5,
+      "createdAt": 1763016292577,
+      "updatedAt": 1763016292577,
+      "metadata": {
+        "imported": true
+      },
+      "nextStepReference": 6
+    },
+    {
+      "title": "Implement Granular Streaming with Suspense",
+      "contentFields": {
+        "version": "v1",
+        "contentForUser": "# Granular Streaming with Suspense\n\nFor more control, use `<Suspense>` to stream specific parts of your page.\n\nCreate `components/BlogList.tsx`:\n```tsx\nimport { getPosts } from '@/lib/data'\n\nexport default async function BlogList() {\n  // Simulate slow data fetch\n  await new Promise(resolve => setTimeout(resolve, 2000))\n  const posts = await getPosts()\n  \n  return (\n    <ul className=\"space-y-2\">\n      {posts.map((post: any) => (\n        <li key={post.id} className=\"p-2 border rounded\">\n          {post.title}\n        </li>\n      ))}\n    </ul>\n  )\n}\n```\n\nCreate `components/BlogListSkeleton.tsx`:\n```tsx\nexport default function BlogListSkeleton() {\n  return (\n    <div className=\"space-y-2\">\n      {[1, 2, 3].map((i) => (\n        <div key={i} className=\"h-12 bg-gray-200 animate-pulse rounded\"></div>\n      ))}\n    </div>\n  )\n}\n```\n\nUpdate `app/blog/page.tsx`:\n```tsx\nimport { Suspense } from 'react'\nimport BlogList from '@/components/BlogList'\nimport BlogListSkeleton from '@/components/BlogListSkeleton'\n\nexport default function BlogPage() {\n  return (\n    <div className=\"p-8\">\n      <header className=\"mb-6\">\n        <h1 className=\"text-3xl font-bold\">Welcome to the Blog</h1>\n        <p className=\"text-gray-600\">Read the latest posts below.</p>\n      </header>\n      <main>\n        <Suspense fallback={<BlogListSkeleton />}>\n          <BlogList />\n        </Suspense>\n      </main>\n    </div>\n  )\n}\n```\n\nNow the header renders immediately while the blog list streams in!",
+        "contextForAgent": "Suspense allows granular control over streaming at the component level. Unlike loading.js which streams the entire page, Suspense lets you: (1) Stream individual components independently, (2) Show different loading states for different parts of the page, (3) Render static content immediately while dynamic content loads, (4) Have multiple Suspense boundaries on one page. The pattern: wrap slow components in Suspense, provide a fallback, and the content outside Suspense renders immediately. BlogList is a Server Component (async, fetches data on server), and Suspense handles the streaming. The skeleton matches the structure of the final content for smooth transition. Multiple Suspense boundaries can be nested or parallel.",
+        "operationsForAgent": "1. Create components directory: mkdir -p components\n2. Create components/BlogList.tsx with async data fetching (include the 2-second delay for demonstration)\n3. Create components/BlogListSkeleton.tsx with skeleton UI\n4. Update app/blog/page.tsx to import Suspense from 'react'\n5. Import both BlogList and BlogListSkeleton components\n6. Structure the page with static header outside Suspense, BlogList inside Suspense with BlogListSkeleton as fallback\n7. Remove any existing loading.js to see the difference (or keep it to see how they work together)\n8. Navigate to http://localhost:3000/blog\n9. Success indicators: Header appears immediately, skeleton shows for ~2 seconds, then blog list appears\n10. The rest of the page remains interactive during loading\n11. After testing, you can remove the artificial delay from BlogList.tsx",
+        "introductionForAgent": "This step demonstrates component-level streaming using React Suspense. You'll create separate components for the blog list and skeleton, allowing parts of the page to render immediately while other parts stream in."
+      },
+      "displayOrder": 6,
+      "createdAt": 1763016292577,
+      "updatedAt": 1763016292577,
+      "metadata": {
+        "imported": true
+      },
+      "nextStepReference": 7
+    },
+    {
+      "title": "Implement Sequential Data Fetching Pattern",
+      "contentFields": {
+        "version": "v1",
+        "contentForUser": "# Sequential Data Fetching\n\nSometimes one request depends on another. Let's implement an artist page where playlists depend on the artist ID.\n\nCreate `lib/data.ts` helpers:\n```tsx\nexport async function getArtist(username: string) {\n  // Simulate API call\n  await new Promise(resolve => setTimeout(resolve, 1000))\n  return { id: '123', name: username, bio: 'Artist bio' }\n}\n\nexport async function getArtistPlaylists(artistID: string) {\n  // Simulate API call\n  await new Promise(resolve => setTimeout(resolve, 1000))\n  return [\n    { id: '1', name: 'Greatest Hits' },\n    { id: '2', name: 'Acoustic Sessions' }\n  ]\n}\n```\n\nCreate `app/artist/[username]/page.tsx`:\n```tsx\nimport { Suspense } from 'react'\nimport { getArtist, getArtistPlaylists } from '@/lib/data'\n\nasync function Playlists({ artistID }: { artistID: string }) {\n  const playlists = await getArtistPlaylists(artistID)\n  \n  return (\n    <ul className=\"mt-4 space-y-2\">\n      {playlists.map((playlist) => (\n        <li key={playlist.id} className=\"p-2 bg-blue-50 rounded\">\n          {playlist.name}\n        </li>\n      ))}\n    </ul>\n  )\n}\n\nexport default async function Page({\n  params,\n}: {\n  params: Promise<{ username: string }>\n}) {\n  const { username } = await params\n  const artist = await getArtist(username)\n\n  return (\n    <div className=\"p-8\">\n      <h1 className=\"text-2xl font-bold\">{artist.name}</h1>\n      <Suspense fallback={<div>Loading playlists...</div>}>\n        <Playlists artistID={artist.id} />\n      </Suspense>\n    </div>\n  )\n}\n```\n\nVisit `http://localhost:3000/artist/taylor-swift` to see sequential fetching in action.",
+        "contextForAgent": "Sequential fetching means one request must complete before another can start because it depends on data from the first. In this example, getArtistPlaylists needs the artist ID from getArtist. The pattern: (1) Page component awaits the first fetch (artist), (2) Passes required data (artistID) to child component, (3) Child component is wrapped in Suspense, (4) Child fetches dependent data. Without Suspense around Playlists, the entire page would wait for both fetches. With Suspense, the artist name shows immediately, then playlists stream in. The [username] folder creates a dynamic route segment in Next.js. The params prop is a Promise in newer Next.js versions and must be awaited. This is different from parallel fetching where requests are independent.",
+        "operationsForAgent": "1. Update lib/data.ts to include getArtist and getArtistPlaylists functions\n2. Create directory structure: mkdir -p app/artist/[username]\n3. Create app/artist/[username]/page.tsx with the sequential fetching pattern\n4. Ensure the Playlists component is defined as async and nested inside the same file\n5. Verify params is awaited before accessing username\n6. Wrap Playlists in Suspense with appropriate fallback\n7. Start dev server if not running: npm run dev\n8. Navigate to http://localhost:3000/artist/taylor-swift (or any username)\n9. Success indicators: Artist name appears first (~1 second), then 'Loading playlists...' appears, then playlists appear (~1 second later)\n10. Try different usernames in the URL to test dynamic routing\n11. Total load time should be ~2 seconds (sequential) not ~1 second (parallel)",
+        "introductionForAgent": "This step demonstrates sequential data fetching where one API call depends on data from another. You'll create a dynamic route for artist pages where playlists can only be fetched after getting the artist ID."
+      },
+      "displayOrder": 7,
+      "createdAt": 1763016292577,
+      "updatedAt": 1763016292577,
+      "metadata": {
+        "imported": true
+      },
+      "nextStepReference": 8
+    },
+    {
+      "title": "Implement Parallel Data Fetching Pattern",
+      "contentFields": {
+        "version": "v1",
+        "contentForUser": "# Parallel Data Fetching\n\nWhen requests are independent, fetch them in parallel for better performance using `Promise.all`.\n\nUpdate `lib/data.ts`:\n```tsx\nexport async function getAlbums(username: string) {\n  await new Promise(resolve => setTimeout(resolve, 1500))\n  return [\n    { id: '1', title: 'Album One', year: 2020 },\n    { id: '2', title: 'Album Two', year: 2022 }\n  ]\n}\n```\n\nCreate `app/artist/[username]/albums.tsx`:\n```tsx\nexport default function Albums({ \n  list \n}: { \n  list: { id: string; title: string; year: number }[] \n}) {\n  return (\n    <div className=\"mt-4\">\n      <h2 className=\"text-xl font-semibold mb-2\">Albums</h2>\n      <div className=\"grid grid-cols-2 gap-4\">\n        {list.map((album) => (\n          <div key={album.id} className=\"p-4 border rounded\">\n            <div className=\"font-medium\">{album.title}</div>\n            <div className=\"text-sm text-gray-500\">{album.year}</div>\n          </div>\n        ))}\n      </div>\n    </div>\n  )\n}\n```\n\nCreate `app/artist/[username]/parallel/page.tsx`:\n```tsx\nimport { getArtist, getAlbums } from '@/lib/data'\nimport Albums from '../albums'\n\nexport default async function Page({\n  params,\n}: {\n  params: Promise<{ username: string }>\n}) {\n  const { username } = await params\n\n  // Initiate both requests without awaiting\n  const artistData = getArtist(username)\n  const albumsData = getAlbums(username)\n\n  // Wait for both to complete\n  const [artist, albums] = await Promise.all([artistData, albumsData])\n\n  return (\n    <div className=\"p-8\">\n      <h1 className=\"text-2xl font-bold\">{artist.name}</h1>\n      <p className=\"text-gray-600\">{artist.bio}</p>\n      <Albums list={albums} />\n    </div>\n  )\n}\n```\n\nVisit `http://localhost:3000/artist/taylor-swift/parallel`.\n\n**Performance:** Parallel fetching takes ~1.5s (longest request) vs ~2.5s sequential!",
+        "contextForAgent": "Parallel fetching launches multiple independent requests simultaneously, significantly improving performance. The key pattern: (1) Call fetch/async functions without await to start them immediately, (2) Store promises in variables, (3) Use Promise.all to await all promises together. Promise.all waits for the slowest request, so total time equals the longest individual request, not the sum. In this example: getArtist (1s) and getAlbums (1.5s) run simultaneously, total time is 1.5s. Sequential would be 2.5s. IMPORTANT: If one promise in Promise.all rejects, the entire operation fails. For error handling, use Promise.allSettled instead. This pattern works for any async operations, not just fetch - database queries, file reads, etc. The requests must be independent (neither depends on data from the other).",
+        "operationsForAgent": "1. Add getAlbums function to lib/data.ts with 1.5 second delay\n2. Create app/artist/[username]/albums.tsx component (regular component, not async)\n3. Create directory: mkdir -p app/artist/[username]/parallel\n4. Create app/artist/[username]/parallel/page.tsx with parallel fetching pattern\n5. Key implementation: Call both data functions WITHOUT await, then use Promise.all\n6. Verify the pattern: const artistData = getArtist(username) and const albumsData = getAlbums(username) are called first, THEN awaited together\n7. Navigate to http://localhost:3000/artist/taylor-swift/parallel\n8. Use browser DevTools to measure load time (should be ~1.5s, not 2.5s)\n9. Success indicators: Page loads faster than sequential version, both artist info and albums appear together\n10. Compare by visiting the sequential version (/artist/taylor-swift) - it should take notably longer\n11. If you see errors about promises, check that you're not awaiting individual calls before Promise.all",
+        "introductionForAgent": "This step demonstrates parallel data fetching using Promise.all to fetch multiple independent datasets simultaneously. You'll create a page that fetches artist info and albums in parallel for improved performance."
+      },
+      "displayOrder": 8,
+      "createdAt": 1763016292577,
+      "updatedAt": 1763016292577,
+      "metadata": {
+        "imported": true
+      },
+      "nextStepReference": 9
+    },
+    {
+      "title": "Implement Data Preloading Pattern",
+      "contentFields": {
+        "version": "v1",
+        "contentForUser": "# Preloading Data\n\nPreload data by eagerly calling functions before blocking operations. This optimizes conditional rendering scenarios.\n\nUpdate `lib/data.ts`:\n```tsx\nexport async function getItem(id: string) {\n  await new Promise(resolve => setTimeout(resolve, 1000))\n  return {\n    id,\n    name: `Item ${id}`,\n    description: 'A detailed item description',\n    price: 99.99\n  }\n}\n\nexport async function checkIsAvailable() {\n  await new Promise(resolve => setTimeout(resolve, 500))\n  return Math.random() > 0.3 // 70% chance available\n}\n\n// Preload utility\nexport const preload = (id: string) => {\n  void getItem(id)\n}\n```\n\nCreate `components/Item.tsx`:\n```tsx\nimport { getItem } from '@/lib/data'\n\nexport async function Item({ id }: { id: string }) {\n  const result = await getItem(id)\n  \n  return (\n    <div className=\"p-6 border rounded-lg\">\n      <h2 className=\"text-xl font-bold\">{result.name}</h2>\n      <p className=\"text-gray-600 mt-2\">{result.description}</p>\n      <p className=\"text-lg font-semibold mt-4\">${result.price}</p>\n    </div>\n  )\n}\n```\n\nCreate `app/item/[id]/page.tsx`:\n```tsx\nimport { checkIsAvailable, preload } from '@/lib/data'\nimport { Item } from '@/components/Item'\n\nexport default async function Page({\n  params,\n}: {\n  params: Promise<{ id: string }>\n}) {\n  const { id } = await params\n  \n  // Start loading item data immediately\n  preload(id)\n  \n  // Perform another async task\n  const isAvailable = await checkIsAvailable()\n\n  return (\n    <div className=\"p-8\">\n      {isAvailable ? (\n        <Item id={id} />\n      ) : (\n        <div className=\"text-red-600 font-semibold\">\n          This item is currently unavailable\n        </div>\n      )}\n    </div>\n  )\n}\n```\n\nVisit `http://localhost:3000/item/123` and refresh to see conditional rendering.",
+        "contextForAgent": "Preloading starts data fetching before you know if you'll need the data. The void operator calls the function but doesn't wait for it, starting the fetch in the background. Benefits: (1) If the condition is true, data is already loading/loaded, (2) Total time is max(checkIsAvailable, getItem) instead of sum, (3) No wasted work if condition is false - React will cancel the fetch. The pattern uses React's request memoization - if Item calls getItem with the same ID, it gets the cached result from preload. The void operator evaluates the expression and returns undefined, preventing unhandled promise warnings. This is useful when you have conditional rendering based on one async call but need data from another async call if condition is true. Alternative: React's cache function makes this pattern more explicit and reusable.",
+        "operationsForAgent": "1. Add getItem, checkIsAvailable, and preload functions to lib/data.ts\n2. Create components/Item.tsx as an async Server Component\n3. Create directory: mkdir -p app/item/[id]\n4. Create app/item/[id]/page.tsx with preloading pattern\n5. Critical order: preload(id) BEFORE await checkIsAvailable()\n6. Ensure preload uses void operator: void getItem(id)\n7. Item component should call getItem again - it will use cached result\n8. Navigate to http://localhost:3000/item/123\n9. Success indicators: Page loads in ~1 second (not 1.5s), shows item or 'unavailable' message\n10. Refresh multiple times - you'll see both available and unavailable states (70% available)\n11. Without preloading, available items would take 1.5s (500ms + 1000ms sequential)\n12. With preloading, available items take ~1s (parallel execution)",
+        "introductionForAgent": "This step demonstrates the preloading pattern where you eagerly initiate data fetching before knowing if it's needed. You'll create a page with conditional rendering that optimizes load time by preloading data."
+      },
+      "displayOrder": 9,
+      "createdAt": 1763016292577,
+      "updatedAt": 1763016292577,
+      "metadata": {
+        "imported": true
+      },
+      "nextStepReference": 10
+    },
+    {
+      "title": "Implement Request Deduplication with React cache",
+      "contentFields": {
+        "version": "v1",
+        "contentForUser": "# Request Deduplication with React cache\n\nWhen using ORMs or databases (not `fetch`), use React's `cache` function to deduplicate requests.\n\nInstall server-only package:\n```bash\nnpm install server-only\n```\n\nCreate `utils/get-item.ts`:\n```tsx\nimport { cache } from 'react'\nimport 'server-only'\n\n// Simulate database query\nconst fetchItemFromDB = async (id: string) => {\n  console.log(`[DB Query] Fetching item ${id}`)\n  await new Promise(resolve => setTimeout(resolve, 1000))\n  return {\n    id,\n    name: `Database Item ${id}`,\n    category: 'Electronics',\n    stock: 42\n  }\n}\n\nexport const preload = (id: string) => {\n  void getItem(id)\n}\n\nexport const getItem = cache(async (id: string) => {\n  return fetchItemFromDB(id)\n})\n```\n\nCreate `app/cached-item/[id]/page.tsx`:\n```tsx\nimport { getItem } from '@/utils/get-item'\n\nasync function ItemDetails({ id }: { id: string }) {\n  const item = await getItem(id)\n  return <div className=\"text-gray-600\">Category: {item.category}</div>\n}\n\nasync function ItemStock({ id }: { id: string }) {\n  const item = await getItem(id)\n  return <div className=\"text-green-600\">Stock: {item.stock}</div>\n}\n\nexport default async function Page({\n  params,\n}: {\n  params: Promise<{ id: string }>\n}) {\n  const { id } = await params\n  const item = await getItem(id)\n\n  return (\n    <div className=\"p-8\">\n      <h1 className=\"text-2xl font-bold mb-4\">{item.name}</h1>\n      <ItemDetails id={id} />\n      <ItemStock id={id} />\n      <p className=\"mt-4 text-sm text-gray-500\">\n        Check console - only ONE database query!\n      </p>\n    </div>\n  )\n}\n```\n\nVisit `http://localhost:3000/cached-item/456` and check the terminal - you'll see only ONE `[DB Query]` log despite three calls to `getItem`!",
+        "contextForAgent": "React's cache function deduplicates function calls within a single render. Without cache, calling getItem(id) three times would make three database queries. With cache, the first call executes, subsequent calls return the cached result. Key points: (1) Cache is per-request, not cross-request (not a persistent cache), (2) Only works on server (hence server-only package), (3) Deduplicates based on arguments - getItem('1') and getItem('2') are separate, (4) Different from fetch deduplication which is automatic. The server-only package ensures this code never accidentally runs on client (would throw error). This is essential for database queries, ORM calls, file system access - anything not using fetch. The cache is cleared after each request completes. Use this for: database queries, expensive computations, file reads that might be called multiple times in component tree.",
+        "operationsForAgent": "1. Install server-only package: npm install server-only\n2. Create directory: mkdir -p utils\n3. Create utils/get-item.ts with cache implementation\n4. Import cache from 'react' and import 'server-only' at the top\n5. Wrap the async function with cache()\n6. Create directory: mkdir -p app/cached-item/[id]\n7. Create app/cached-item/[id]/page.tsx with three components all calling getItem\n8. Ensure all three components (Page, ItemDetails, ItemStock) call getItem with the same ID\n9. Navigate to http://localhost:3000/cached-item/456\n10. Check the terminal/console where dev server is running\n11. Success indicators: Only ONE '[DB Query]' log appears despite three getItem calls\n12. Page loads in ~1 second, not 3 seconds\n13. If you see three log entries, cache is not working - verify cache wrapper is correct\n14. Try different IDs - each unique ID will trigger one query",
+        "introductionForAgent": "This step demonstrates request deduplication using React's cache function for non-fetch data sources. You'll create a utility that wraps database queries and prevents duplicate calls within a single request."
+      },
+      "displayOrder": 10,
+      "createdAt": 1763016292577,
+      "updatedAt": 1763016292577,
+      "metadata": {
+        "imported": true
+      },
+      "nextStepReference": 11
+    },
+    {
+      "title": "Explore Advanced Caching Options",
+      "contentFields": {
+        "version": "v1",
+        "contentForUser": "# Advanced Caching Options\n\nNext.js provides several caching mechanisms for `fetch` requests.\n\n## Force Dynamic Rendering\n\nCreate `app/dynamic-blog/page.tsx`:\n```tsx\nexport default async function Page() {\n  // Force dynamic rendering - no caching\n  const data = await fetch('https://api.vercel.app/blog', {\n    cache: 'no-store'\n  })\n  const posts = await data.json()\n  \n  return (\n    <div className=\"p-8\">\n      <p className=\"text-sm text-gray-500 mb-4\">\n        Fetched at: {new Date().toLocaleTimeString()}\n      </p>\n      <ul className=\"space-y-2\">\n        {posts.map((post: any) => (\n          <li key={post.id}>{post.title}</li>\n        ))}\n      </ul>\n    </div>\n  )\n}\n```\n\n## Force Caching\n\nCreate `app/cached-blog/page.tsx`:\n```tsx\nexport default async function Page() {\n  // Force caching - revalidate every 60 seconds\n  const data = await fetch('https://api.vercel.app/blog', {\n    next: { revalidate: 60 }\n  })\n  const posts = await data.json()\n  \n  return (\n    <div className=\"p-8\">\n      <p className=\"text-sm text-gray-500 mb-4\">\n        Cached data (revalidates every 60s)\n      </p>\n      <ul className=\"space-y-2\">\n        {posts.map((post: any) => (\n          <li key={post.id}>{post.title}</li>\n        ))}\n      </ul>\n    </div>\n  )\n}\n```\n\n**Caching Options:**\n- `cache: 'no-store'` - Always fetch fresh data\n- `cache: 'force-cache'` - Cache indefinitely\n- `next: { revalidate: 60 }` - Cache for 60 seconds then refresh\n- Default: Static rendering with cached output",
+        "contextForAgent": "Next.js extends the fetch API with caching options. Understanding: (1) Static rendering (default): Route is pre-rendered at build time, output cached, (2) Dynamic rendering: Route rendered on each request, (3) Revalidation: Cached data refreshes after time period. The 'cache' option is standard fetch API. The 'next' option is Next.js-specific. cache: 'no-store' opts into dynamic rendering - page generated per request. next: { revalidate: N } implements ISR (Incremental Static Regeneration) - page is static but updates every N seconds. force-cache caches forever until manual revalidation. In development mode, caching is less aggressive to aid debugging. In production, these options significantly affect performance and freshness. Choose based on: how often data changes, how important freshness is, traffic patterns.",
+        "operationsForAgent": "1. Create directory: mkdir -p app/dynamic-blog\n2. Create app/dynamic-blog/page.tsx with cache: 'no-store' option\n3. Include timestamp in render to show it changes on each request\n4. Create directory: mkdir -p app/cached-blog\n5. Create app/cached-blog/page.tsx with next: { revalidate: 60 } option\n6. Both pages should fetch from the same API endpoint\n7. Navigate to http://localhost:3000/dynamic-blog\n8. Note the timestamp, refresh the page multiple times\n9. Success indicators: Dynamic blog timestamp changes on every refresh\n10. Navigate to http://localhost:3000/cached-blog and refresh\n11. Cached blog timestamp should stay the same for 60 seconds\n12. In development mode, you may not see full caching behavior - test in production build for accurate results\n13. To test production: npm run build && npm run start",
+        "introductionForAgent": "This step explores advanced caching options for fetch requests in Next.js. You'll create two pages demonstrating dynamic rendering (no cache) and time-based revalidation patterns."
+      },
+      "displayOrder": 11,
+      "createdAt": 1763016292577,
+      "updatedAt": 1763016292577,
+      "metadata": {
+        "imported": true
+      },
+      "nextStepReference": null
+    }
+  ],
+  "metadata": {
+    "originalDocPath": "docs/Next.js/01-app/01-getting-started/07-fetching-data.mdx",
+    "generatedBy": "cc-experiment-walkthrough-generator",
+    "documentVersion": "latest",
+    "concepts": [
+      "Server Components data fetching",
+      "Client Components data fetching",
+      "React use hook",
+      "Streaming with Suspense",
+      "loading.js convention",
+      "Sequential vs Parallel fetching",
+      "Request deduplication",
+      "React cache function",
+      "Preloading pattern",
+      "Next.js caching options"
+    ]
+  }
+}

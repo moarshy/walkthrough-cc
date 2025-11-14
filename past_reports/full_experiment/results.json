@@ -1,0 +1,45 @@
+{
+  "task": "nextjs-data-fetching",
+  "vanilla": {
+    "success": false,
+    "duration": 265.0748028755188,
+    "tokens": {
+      "total": 1199322,
+      "input": 36,
+      "output": 6417,
+      "cache_creation": 31425,
+      "cache_read": 1161444
+    },
+    "tool_calls": 80,
+    "errors": {
+      "total": 0,
+      "bash": 0,
+      "read": 0,
+      "write": 0,
+      "edit": 0,
+      "glob": 0,
+      "grep": 0
+    }
+  },
+  "walkthrough": {
+    "success": false,
+    "duration": 596.2398359775543,
+    "tokens": {
+      "total": 6066997,
+      "input": 45,
+      "output": 18622,
+      "cache_creation": 114941,
+      "cache_read": 5933389
+    },
+    "tool_calls": 161,
+    "errors": {
+      "total": 0,
+      "bash": 0,
+      "read": 0,
+      "write": 0,
+      "edit": 0,
+      "glob": 0,
+      "grep": 0
+    }
+  }
+}
