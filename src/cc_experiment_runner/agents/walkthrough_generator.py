@@ -17,6 +17,7 @@ from claude_agent_sdk import (
     ClaudeAgentOptions,
     AssistantMessage,
     TextBlock,
+    ToolUseBlock,
 )
 
 
@@ -382,40 +383,38 @@ Create a walkthrough with the following structure and **USE THE WRITE TOOL** to 
 
 ```json
 {{
-  "version": "1.0",
-  "exportedAt": "{timestamp}",
   "walkthrough": {{
     "title": "Getting Started with {library_name}",
     "description": "Step-by-step guide...",
-    "type": "quickstart",
-    "status": "published",
+    "library": "{library_name}",
+    "version": "{library_version}",
     "createdAt": {created_at},
     "updatedAt": {updated_at},
-    "estimatedDurationMinutes": 30,
-    "tags": ["{library_name}", "quickstart"],
-    "metadata": null
+    "originalDocPath": "docs/path/to/doc.md",
+    "generatedBy": "cc-experiment-walkthrough-generator"
   }},
   "steps": [
     {{
-      "title": "Step Title",
-      "contentFields": {{
-        "version": "v1",
-        "contentForUser": "# Step Title\\n\\nExplanation...\\n\\n```bash\\ncommand\\n```",
-        "contextForAgent": "Background info about this step...",
-        "operationsForAgent": "1. Run: command\\n2. Check output...\\n3. Verify...",
-        "introductionForAgent": "This step accomplishes..."
-      }},
-      "displayOrder": 0,
+      "displayOrder": 1,
+      "contentForUser": "# Step Title\\n\\nExplanation for the user with markdown formatting...\\n\\n```bash\\ncommand\\n```\\n\\nMore details...",
+      "contextForAgent": "Background info about this step, explaining why it's needed, what it accomplishes, and any important context the agent should understand.",
+      "operationsForAgent": "1. Run: command\\n2. Check output for success indicators\\n3. Verify that X was created\\n4. If error Y occurs, do Z",
+      "introductionForAgent": "This step accomplishes [goal]. The agent should [key action].",
+      "nextStepReference": 2,
       "createdAt": {step_created_at},
-      "updatedAt": {step_updated_at},
-      "metadata": {{"imported": true}},
-      "nextStepReference": 1
+      "updatedAt": {step_updated_at}
+    }},
+    {{
+      "displayOrder": 2,
+      "contentForUser": "# Another Step\\n\\nMore instructions...",
+      "contextForAgent": "Context for step 2...",
+      "operationsForAgent": "Operations for step 2...",
+      "introductionForAgent": "Purpose of step 2...",
+      "nextStepReference": null,
+      "createdAt": {step_created_at},
+      "updatedAt": {step_updated_at}
     }}
-  ],
-  "metadata": {{
-    "originalDocPath": "docs/{library_name}",
-    "generatedBy": "cc-experiment-walkthrough-generator"
-  }}
+  ]
 }}
 ```
 
@@ -560,6 +559,11 @@ External code snippets have been automatically resolved and inlined:
         # This ensures relative paths work correctly
         experiment_root = output_file.parent.parent if output_file.parent.name == 'walkthroughs' else output_file.parent
 
+        # Set environment variable for hooks to know where to write logs
+        import os
+        hooks_log_dir = experiment_root / "walkthroughs" / "hooks_logs"
+        os.environ['WALKTHROUGH_HOOKS_LOG_DIR'] = str(hooks_log_dir)
+
         options = ClaudeAgentOptions(
             system_prompt=GENERATION_SYSTEM_PROMPT,
             allowed_tools=["Write"],  # Agent uses Write to save JSON
@@ -569,6 +573,7 @@ External code snippets have been automatically resolved and inlined:
         )
 
         logger.log_message("Initializing Claude SDK client")
+        logger.log_message(f"Hooks logs will be written to: {hooks_log_dir}")
 
         async with ClaudeSDKClient(options=options) as client:
             # Generate walkthrough using agent
@@ -602,14 +607,30 @@ External code snippets have been automatically resolved and inlined:
                 message_count += 1
                 logger.log_message(f"Received message {message_count}: {type(message).__name__}")
 
-                # Log assistant messages
+                # Log all messages to messages.jsonl
+                from claude_agent_sdk import ResultMessage, UserMessage, SystemMessage
+
                 if isinstance(message, AssistantMessage):
+                    # Log assistant message to messages.jsonl
+                    content_for_log = []
                     for block in message.content:
                         if isinstance(block, TextBlock):
+                            content_for_log.append({"type": "text", "text": block.text})
                             logger.log_message(f"Assistant text: {block.text[:200]}...")
+                        elif isinstance(block, ToolUseBlock):
+                            content_for_log.append({"type": "tool_use", "name": block.name, "id": block.id})
+
+                    logger.log_conversation_message("assistant", content_for_log)
+
+                elif isinstance(message, UserMessage):
+                    # Log user message (tool results)
+                    logger.log_conversation_message("user", str(message.content)[:500])
+
+                elif isinstance(message, SystemMessage):
+                    # Log system message - SystemMessage has different structure
+                    logger.log_conversation_message("system", str(message)[:500])
 
                 # Track token usage
-                from claude_agent_sdk import ResultMessage
                 if isinstance(message, ResultMessage) and message.usage:
                     usage = message.usage
                     logger.track_tokens(

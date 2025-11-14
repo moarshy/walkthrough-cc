@@ -259,10 +259,10 @@ def main():
     print(f"📊 Results saved: {results_file}\n")
 
     # Cleanup Docker and repository
-    print("🧹 Cleaning up...")
-    harness.cleanup()
-    repo_manager.cleanup_run("repo")
-    print("✅ Cleanup complete\n")
+    # print("🧹 Cleaning up...")
+    # harness.cleanup()
+    # repo_manager.cleanup_run("repo")
+    # print("✅ Cleanup complete\n")
 
     print(f"🎉 Experiment complete: {experiment_dir}\n")
 

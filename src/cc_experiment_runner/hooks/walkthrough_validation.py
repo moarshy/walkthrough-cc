@@ -23,10 +23,22 @@ def write_hook_log(hook_name: str, status: str, details: str, log_dir: Path = No
         hook_name: Name of the hook (e.g., "validate_output_path")
         status: "SUCCESS" or "FAILED" or "DENIED"
         details: Additional details about the execution
-        log_dir: Directory to write logs (defaults to current working directory/hooks_logs)
+        log_dir: Directory to write logs (defaults to WALKTHROUGH_HOOKS_LOG_DIR env var)
     """
     if log_dir is None:
-        log_dir = Path.cwd() / "walkthroughs" / "hooks_logs"
+        # First, check for environment variable set by walkthrough generator
+        import os
+        env_log_dir = os.environ.get('WALKTHROUGH_HOOKS_LOG_DIR')
+
+        if env_log_dir:
+            log_dir = Path(env_log_dir)
+        else:
+            # Fallback: use current working directory
+            cwd = Path.cwd()
+            if (cwd / "walkthroughs").exists():
+                log_dir = cwd / "walkthroughs" / "hooks_logs"
+            else:
+                log_dir = cwd / "walkthroughs" / "hooks_logs"
 
     log_dir.mkdir(parents=True, exist_ok=True)
 
@@ -120,78 +132,91 @@ async def validate_walkthrough_json_hook(
     """
     if input_data.get('tool_name') == 'Write':
         content = input_data.get('tool_input', {}).get('content', '')
+        file_path = input_data.get('tool_input', {}).get('file_path', '')
 
         try:
             data = json.loads(content)
 
-            # Validate required top-level fields
-            if 'walkthrough' not in data:
+            # Validate using Pydantic schema
+            try:
+                walkthrough = Walkthrough(**data)
+
+                # Validation passed!
+                feedback = f'✅ Valid walkthrough JSON with {len(walkthrough.steps)} steps'
+
+                # Write success log
+                write_hook_log(
+                    hook_name="validate_walkthrough_json",
+                    status="SUCCESS",
+                    details=(
+                        f"Agent: walkthrough_generator\n"
+                        f"File: {file_path}\n"
+                        f"Title: {walkthrough.walkthrough.title}\n"
+                        f"Steps: {len(walkthrough.steps)}\n"
+                        f"Validation: Passed Pydantic schema validation"
+                    )
+                )
+
                 return {
                     'hookSpecificOutput': {
                         'hookEventName': 'PostToolUse',
-                        'feedbackMessage': (
-                            '❌ Missing "walkthrough" object at root level.\n\n'
-                            'Required structure:\n'
-                            '{\n'
-                            '  "walkthrough": { "title": "...", ... },\n'
-                            '  "steps": [...]\n'
-                            '}'
-                        )
+                        'feedbackMessage': feedback
                     }
                 }
 
-            if 'steps' not in data or not isinstance(data['steps'], list):
+            except ValidationError as e:
+                # Pydantic validation failed
+                error_details = []
+                for error in e.errors():
+                    field = " -> ".join(str(x) for x in error['loc'])
+                    msg = error['msg']
+                    error_details.append(f"  • {field}: {msg}")
+
+                feedback = (
+                    f'❌ Walkthrough schema validation failed:\n\n'
+                    f'{chr(10).join(error_details)}\n\n'
+                    f'Please fix the validation errors and ensure all required fields are present.'
+                )
+
+                # Write failure log
+                write_hook_log(
+                    hook_name="validate_walkthrough_json",
+                    status="FAILED",
+                    details=(
+                        f"Agent: walkthrough_generator\n"
+                        f"File: {file_path}\n"
+                        f"Validation errors:\n{chr(10).join(error_details)}"
+                    )
+                )
+
                 return {
                     'hookSpecificOutput': {
                         'hookEventName': 'PostToolUse',
-                        'feedbackMessage': (
-                            '❌ Missing or invalid "steps" array.\n\n'
-                            'Required: "steps" must be an array of step objects'
-                        )
+                        'feedbackMessage': feedback
                     }
                 }
-
-            # Validate step structure
-            required_step_fields = [
-                'contentForUser',
-                'contextForAgent',
-                'operationsForAgent',
-                'introductionForAgent'
-            ]
-
-            for i, step in enumerate(data['steps']):
-                missing_fields = [f for f in required_step_fields if f not in step]
-                if missing_fields:
-                    return {
-                        'hookSpecificOutput': {
-                            'hookEventName': 'PostToolUse',
-                            'feedbackMessage': (
-                                f'❌ Step {i+1} missing required fields: {", ".join(missing_fields)}\n\n'
-                                f'Each step must have:\n'
-                                f'- contentForUser (markdown for users)\n'
-                                f'- contextForAgent (background knowledge)\n'
-                                f'- operationsForAgent (executable commands)\n'
-                                f'- introductionForAgent (step purpose)'
-                            )
-                        }
-                    }
-
-            # Validation passed
-            return {
-                'hookSpecificOutput': {
-                    'hookEventName': 'PostToolUse',
-                    'feedbackMessage': f'✅ Valid walkthrough JSON with {len(data["steps"])} steps'
-                }
-            }
 
         except json.JSONDecodeError as e:
+            feedback = (
+                f'❌ Invalid JSON syntax: {str(e)}\n\n'
+                f'Please fix the JSON syntax errors.'
+            )
+
+            # Write failure log
+            write_hook_log(
+                hook_name="validate_walkthrough_json",
+                status="FAILED",
+                details=(
+                    f"Agent: walkthrough_generator\n"
+                    f"File: {file_path}\n"
+                    f"JSON syntax error: {str(e)}"
+                )
+            )
+
             return {
                 'hookSpecificOutput': {
                     'hookEventName': 'PostToolUse',
-                    'feedbackMessage': (
-                        f'❌ Invalid JSON syntax: {str(e)}\n\n'
-                        f'Please fix the JSON syntax errors.'
-                    )
+                    'feedbackMessage': feedback
                 }
             }
 
