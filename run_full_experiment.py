@@ -87,17 +87,15 @@ def main():
     generator = WalkthroughGenerator(api_key=os.getenv('ANTHROPIC_API_KEY'))
 
     try:
-        # Read doc content
-        doc_content = target_doc_path.read_text()
-
-        walkthrough = generator.generate_from_doc(
-            doc_content=doc_content,
+        # Generate walkthrough with snippet resolution
+        walkthrough = generator.generate_from_file(
+            doc_path=target_doc_path,
             library_name=task.library_name,
-            task_description=f"Set up {task.library_name} following {task.target_doc}"
+            task_description=f"Set up {task.library_name} following {task.target_doc}",
+            output_file=walkthrough_file,
+            repo_path=repo_dir,
+            docs_folder=task.docs_folder
         )
-
-        # Save walkthrough
-        walkthrough_file.write_text(json.dumps(walkthrough, indent=2))
 
         print(f"✅ Walkthrough generated: {walkthrough_file.name}")
         print(f"   Title: {walkthrough.get('walkthrough', {}).get('title', 'N/A')}")
