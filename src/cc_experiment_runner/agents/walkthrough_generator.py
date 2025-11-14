@@ -425,7 +425,9 @@ IMPORTANT:
 - Use actual timestamps (Unix milliseconds)
 - Be comprehensive - don't skip steps from the documentation
 - Make operations concrete and executable
-- **YOU MUST USE THE WRITE TOOL** to save the JSON to `{output_file}` - do not just return it as text
+- **YOU MUST USE THE WRITE TOOL** to save the JSON
+- **CRITICAL**: Use the RELATIVE path: `{output_file}` (NOT an absolute path)
+- This path is relative to your working directory
 """
 
 
@@ -538,22 +540,41 @@ External code snippets have been automatically resolved and inlined:
         else:
             doc_content_info = "Format: plain markdown, no external snippets detected"
 
-        # Create Claude SDK client with logging hooks
+        # Create Claude SDK client with logging + validation hooks
         from ..agent_hooks import create_logging_hooks
-        hooks = create_logging_hooks(logger)
+        from ..hooks import create_walkthrough_generation_hooks
+
+        # Combine logging hooks with validation hooks
+        logging_hooks = create_logging_hooks(logger)
+        validation_hooks = create_walkthrough_generation_hooks()
+
+        # Merge hooks (validation hooks take precedence)
+        combined_hooks = {**logging_hooks}
+        for event, matchers in validation_hooks.items():
+            if event in combined_hooks:
+                combined_hooks[event].extend(matchers)
+            else:
+                combined_hooks[event] = matchers
+
+        # Set working directory to experiment root (not walkthroughs subdirectory)
+        # This ensures relative paths work correctly
+        experiment_root = output_file.parent.parent if output_file.parent.name == 'walkthroughs' else output_file.parent
 
         options = ClaudeAgentOptions(
             system_prompt=GENERATION_SYSTEM_PROMPT,
             allowed_tools=["Write"],  # Agent uses Write to save JSON
             permission_mode="acceptEdits",
-            cwd=str(output_file.parent),
-            hooks=hooks
+            cwd=str(experiment_root),
+            hooks=combined_hooks
         )
 
         logger.log_message("Initializing Claude SDK client")
 
         async with ClaudeSDKClient(options=options) as client:
             # Generate walkthrough using agent
+            # Use relative path from experiment root
+            relative_output = output_file.relative_to(experiment_root) if output_file.is_relative_to(experiment_root) else f"walkthroughs/{output_file.name}"
+
             prompt = GENERATION_PROMPT_TEMPLATE.format(
                 library_name=library_name,
                 library_version="latest",
@@ -566,7 +587,7 @@ External code snippets have been automatically resolved and inlined:
                 updated_at=now_ms,
                 step_created_at=now_ms,
                 step_updated_at=now_ms,
-                output_file=str(output_file)
+                output_file=str(relative_output)
             )
 
             logger.log_message(f"Sending prompt (length: {len(prompt)} chars)")

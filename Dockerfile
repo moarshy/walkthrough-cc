@@ -27,7 +27,8 @@ RUN npm install -g @anthropic-ai/claude-code
 RUN pip3 install --no-cache-dir \
     claude-agent-sdk \
     python-dotenv \
-    pydantic
+    pydantic \
+    pyyaml
 
 # Copy cc_experiment_runner package
 COPY src/cc_experiment_runner /app/cc_experiment_runner
