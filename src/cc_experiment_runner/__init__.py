@@ -2,14 +2,15 @@
 CC Experiment - Vanilla vs Walkthrough Claude Code Comparison
 ==============================================================
 
-A Python package for comparing vanilla Claude Code (docs only) vs
+A self-contained Python package for comparing vanilla Claude Code (docs only) vs
 walkthrough-powered Claude Code (docs + structured walkthroughs).
 
 Components:
 - schemas: Data models for tasks, results, and metrics
-- harness_docker: Docker container management for agent execution  
-- agent_wrapper: Agent runner (executes inside container)
-- runner: Main experiment orchestrator
+- harness_docker: Docker container management for agent execution
+- agent: Agent runner (executes inside container)
+- walkthrough_generator: Generates walkthroughs with code snippet resolution
+- repository_manager: Git repository cloning and management
 """
 
 __version__ = "0.1.0"
