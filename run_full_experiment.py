@@ -13,16 +13,18 @@ Follows the plan.md architecture:
 import os
 import sys
 import json
+import uuid
 from pathlib import Path
 from dotenv import load_dotenv
-from concurrent.futures import ThreadPoolExecutor, as_completed
+from concurrent.futures import ThreadPoolExecutor
 
 # Import from our cc_experiment_runner package
 from cc_experiment_runner import (
     Task,
     TaskValidation,
     DockerHarness,
-    WalkthroughGenerator
+    WalkthroughGenerator,
+    RepositoryManager,
 )
 
 load_dotenv()
@@ -37,56 +39,59 @@ print("="*70 + "\n")
 
 # Task definition
 task = Task(
-    id="nextjs-data-fetching",
-    library_name="Next.js",
-    library_version="14.0",
-    repo_url="https://github.com/vercel/next.js",
-    branch="canary",
-    docs_folder="docs",
-    target_doc="01-app/01-getting-started/07-fetching-data.mdx",
-    validation=TaskValidation(type="command", command="npm run dev", port=3000, timeout=60)
+    id="fastapi-first-steps",
+    library_name="FastAPI",
+    library_version="0.100",
+    repo_url="https://github.com/tiangolo/fastapi",
+    branch="master",
+    docs_folder="docs/en/docs",
+    target_doc="tutorial/first-steps.md",
+    validation=TaskValidation(type="command", command="uvicorn main:app --reload", port=8000, timeout=30)
 )
 
-# Setup output directory
-output = Path("results/full_experiment")
-output.mkdir(parents=True, exist_ok=True)
+# Generate UUID for this experiment run (use short form for readability)
+experiment_name = str(uuid.uuid4())[:8]
 
-print(f"📁 Output: {output}\n")
+# Setup experiment directory with UUID
+experiment_dir = Path("experiments") / experiment_name
+experiment_dir.mkdir(parents=True, exist_ok=True)
+
+print(f"🆔 Experiment: {experiment_name}")
+print(f"📁 Directory: {experiment_dir}\n")
 
 def main():
-    # Step 1: Clone repository
+    # Step 1: Clone repository using RepositoryManager
     print("Step 1/5: Cloning repository...")
 
-    repo_dir = output / "repo"
-    if repo_dir.exists():
-        import shutil
-        shutil.rmtree(repo_dir)
-
-    # Clone repo
-    import subprocess
-    subprocess.run(
-        ["git", "clone", "--branch", task.branch, "--depth", "1", task.repo_url, str(repo_dir)],
-        check=True,
-        capture_output=True
+    repo_manager = RepositoryManager(base_data_dir=experiment_dir)
+    repo_context = repo_manager.clone_repository(
+        repo_url=task.repo_url,
+        branch=task.branch,
+        run_id="repo",  # Simple name: experiments/{uuid}/repo/
+        library_name=task.library_name,
+        library_version=task.library_version,
+        docs_path=task.docs_folder
     )
 
+    repo_dir = repo_context.repo_dir
     docs_path = repo_dir / task.docs_folder
     target_doc_path = docs_path / task.target_doc
 
     print(f"✅ Repository cloned to: {repo_dir}")
     print(f"   Docs folder: {docs_path}")
-    print(f"   Target doc: {target_doc_path}\n")
-
-    # Step 2: Generate walkthrough using WalkthroughGenerator
-    print("Step 2/5: Generating walkthrough...")
-
-    walkthrough_output_dir = output / "walkthroughs"
-    walkthrough_output_dir.mkdir(parents=True, exist_ok=True)
-    walkthrough_file = walkthrough_output_dir / f"{task.id}.json"
-
-    generator = WalkthroughGenerator(api_key=os.getenv('ANTHROPIC_API_KEY'))
+    print(f"   Target doc: {target_doc_path}")
+    print(f"   Commit: {repo_context.commit_hash}\n")
 
     try:
+        # Step 2: Generate walkthrough using WalkthroughGenerator
+        print("Step 2/5: Generating walkthrough...")
+
+        walkthrough_dir = experiment_dir / "walkthroughs"
+        walkthrough_dir.mkdir(exist_ok=True)
+        walkthrough_file = walkthrough_dir / f"{task.id}.json"
+
+        generator = WalkthroughGenerator(api_key=os.getenv('ANTHROPIC_API_KEY'))
+
         # Generate walkthrough with snippet resolution
         walkthrough = generator.generate_from_file(
             doc_path=target_doc_path,
@@ -111,15 +116,18 @@ def main():
     print("Step 3/5: Running VANILLA and WALKTHROUGH agents in parallel...\n")
     harness = DockerHarness()
 
-    # Setup workspaces
-    vanilla_workspace = output / "vanilla_workspace"
+    # Setup workspaces (matching past structure: vanilla_workspace, walkthrough_workspace)
+    vanilla_workspace = experiment_dir / "vanilla_workspace"
     vanilla_workspace.mkdir(exist_ok=True)
-    vanilla_logs = output / "vanilla_logs"
+
+    walkthrough_workspace = experiment_dir / "walkthrough_workspace"
+    walkthrough_workspace.mkdir(exist_ok=True)
+
+    # Setup logs (matching past structure: vanilla_logs, walkthrough_logs)
+    vanilla_logs = experiment_dir / "vanilla_logs"
     vanilla_logs.mkdir(exist_ok=True)
 
-    walkthrough_workspace = output / "walkthrough_workspace"
-    walkthrough_workspace.mkdir(exist_ok=True)
-    walkthrough_logs = output / "walkthrough_logs"
+    walkthrough_logs = experiment_dir / "walkthrough_logs"
     walkthrough_logs.mkdir(exist_ok=True)
 
     # Run both agents in parallel using ThreadPoolExecutor
@@ -190,9 +198,17 @@ def main():
     print(f"{'  Edit Errors':<25} {vanilla_result.tool_calls.edit_errors:<20} {walkthrough_result.tool_calls.edit_errors:<20}")
     print("="*70 + "\n")
 
-    # Save results with full token breakdown
+    # Save results with full token breakdown (matching past structure: results.json at root)
     results = {
+        "experiment_id": experiment_name,
         "task": task.id,
+        "library": {
+            "name": task.library_name,
+            "version": task.library_version,
+            "repo_url": task.repo_url,
+            "branch": task.branch,
+            "commit": repo_context.commit_hash
+        },
         "vanilla": {
             "success": vanilla_result.success,
             "duration": vanilla_result.duration_seconds,
@@ -237,11 +253,18 @@ def main():
         }
     }
 
-    (output / "results.json").write_text(json.dumps(results, indent=2))
-    print(f"📊 Results saved: {output}/results.json\n")
+    # Save results.json at experiment root (matching past structure)
+    results_file = experiment_dir / "results.json"
+    results_file.write_text(json.dumps(results, indent=2))
+    print(f"📊 Results saved: {results_file}\n")
 
-    # Cleanup
+    # Cleanup Docker and repository
+    print("🧹 Cleaning up...")
     harness.cleanup()
+    repo_manager.cleanup_run("repo")
+    print("✅ Cleanup complete\n")
+
+    print(f"🎉 Experiment complete: {experiment_dir}\n")
 
     sys.exit(0 if (vanilla_result.success and walkthrough_result.success) else 1)
 

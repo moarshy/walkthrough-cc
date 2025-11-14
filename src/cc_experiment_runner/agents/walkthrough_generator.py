@@ -502,6 +502,20 @@ class WalkthroughGenerator:
 
         output_file.parent.mkdir(parents=True, exist_ok=True)
 
+        # Setup logging (similar to agent logging)
+        log_dir = output_file.parent / "generation_logs"
+        log_dir.mkdir(exist_ok=True)
+
+        from ..agent_hooks import AgentLogger
+        logger = AgentLogger(
+            log_file=log_dir / "generator.log",
+            tools_log_file=log_dir / "tools.jsonl",
+            messages_log_file=log_dir / "messages.jsonl"
+        )
+
+        logger.log_message(f"Starting walkthrough generation for {library_name}")
+        logger.log_message(f"Output file: {output_file}")
+
         # Prepare doc location info
         doc_location_info = ""
         if doc_path and repo_path:
@@ -524,13 +538,19 @@ External code snippets have been automatically resolved and inlined:
         else:
             doc_content_info = "Format: plain markdown, no external snippets detected"
 
-        # Create Claude SDK client
+        # Create Claude SDK client with logging hooks
+        from ..agent_hooks import create_logging_hooks
+        hooks = create_logging_hooks(logger)
+
         options = ClaudeAgentOptions(
             system_prompt=GENERATION_SYSTEM_PROMPT,
             allowed_tools=["Write"],  # Agent uses Write to save JSON
             permission_mode="acceptEdits",
             cwd=str(output_file.parent),
+            hooks=hooks
         )
+
+        logger.log_message("Initializing Claude SDK client")
 
         async with ClaudeSDKClient(options=options) as client:
             # Generate walkthrough using agent
@@ -549,18 +569,51 @@ External code snippets have been automatically resolved and inlined:
                 output_file=str(output_file)
             )
 
+            logger.log_message(f"Sending prompt (length: {len(prompt)} chars)")
+            logger.log_conversation_message("user", prompt)
+
             await client.query(prompt)
 
             # Wait for agent to complete (it will use Write tool)
-            async for _message in client.receive_response():
-                pass  # Agent will write the file
+            logger.log_message("Waiting for agent response...")
+            message_count = 0
+            async for message in client.receive_response():
+                message_count += 1
+                logger.log_message(f"Received message {message_count}: {type(message).__name__}")
+
+                # Log assistant messages
+                if isinstance(message, AssistantMessage):
+                    for block in message.content:
+                        if isinstance(block, TextBlock):
+                            logger.log_message(f"Assistant text: {block.text[:200]}...")
+
+                # Track token usage
+                from claude_agent_sdk import ResultMessage
+                if isinstance(message, ResultMessage) and message.usage:
+                    usage = message.usage
+                    logger.track_tokens(
+                        input_tokens=usage.get("input_tokens", 0),
+                        output_tokens=usage.get("output_tokens", 0),
+                        cache_creation_input_tokens=usage.get("cache_creation_input_tokens", 0),
+                        cache_read_input_tokens=usage.get("cache_read_input_tokens", 0)
+                    )
+
+            logger.log_message(f"Agent finished after {message_count} messages")
 
         # Load the generated file
+        logger.log_message(f"Checking if output file exists: {output_file}")
         if not output_file.exists():
+            logger.log_message(f"ERROR: Output file not created!", level="ERROR")
+            logger.log_message(f"Working directory was: {output_file.parent}", level="ERROR")
+            logger.log_message(f"Files in directory: {list(output_file.parent.glob('*'))}", level="ERROR")
             raise ValueError(f"Agent did not create output file: {output_file}")
 
+        logger.log_message("Output file exists! Loading walkthrough data...")
         with open(output_file, 'r', encoding='utf-8') as f:
             walkthrough_data = json.load(f)
+
+        logger.log_message(f"✅ Successfully loaded walkthrough with {len(walkthrough_data.get('steps', []))} steps")
+        logger.log_message(f"Total tokens used: {logger.get_stats()['total_tokens']}")
 
         return walkthrough_data
 
