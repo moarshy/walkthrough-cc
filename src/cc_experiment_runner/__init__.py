@@ -28,7 +28,7 @@ from .schemas import (
 # Conditional imports - only load host-side modules when not in container
 # (WalkthroughGenerator, RepositoryManager, DockerHarness not needed inside containers)
 try:
-    from .walkthrough_generator import WalkthroughGenerator
+    from .agents import WalkthroughGenerator
     from .repository_manager import RepositoryManager, RunContext
     from .harness_docker import DockerHarness
     __all__ = [

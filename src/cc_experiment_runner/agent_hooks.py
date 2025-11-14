@@ -9,14 +9,14 @@ import json
 from pathlib import Path
 from datetime import datetime
 from typing import Any, Dict, Optional
-from dataclasses import dataclass, asdict
+
+from pydantic import BaseModel, Field
 
 
-@dataclass
-class ToolLogEntry:
+class ToolLogEntry(BaseModel):
     """Log entry for a tool call and its result."""
     timestamp: str
-    event_type: str  # "pre_tool" or "post_tool"
+    event_type: str = Field(..., description="pre_tool or post_tool")
     tool_name: str
     tool_input: Dict[str, Any]
     tool_output: Optional[Dict[str, Any]] = None
@@ -95,7 +95,7 @@ class AgentLogger:
             entry: ToolLogEntry with tool call information
         """
         with open(self.tools_log_file, 'a') as f:
-            f.write(json.dumps(asdict(entry)) + '\n')
+            f.write(json.dumps(entry.model_dump()) + '\n')
 
         self.stats["tool_calls"] += 1
 
