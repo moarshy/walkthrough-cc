@@ -14,29 +14,43 @@ from pathlib import Path
 
 
 # ============================================================================
-# TASK DEFINITION
+# TASK DEFINITION (SetupBench-style)
 # ============================================================================
 
-class TaskValidation(BaseModel):
-    """Validation criteria for a task."""
-    type: Literal["server", "build", "test", "command"]
-    command: Optional[str] = None
-    port: Optional[int] = None
-    timeout: int = 60
-    success_pattern: Optional[str] = None
-    description: Optional[str] = None
-
-
 class Task(BaseModel):
-    """Definition of a setup task for testing."""
-    id: str = Field(description="Unique task identifier")
-    library_name: str = Field(description="Name of library/framework")
-    library_version: str = Field(description="Version being tested")
+    """
+    SetupBench-inspired task definition with deterministic validation.
+
+    This schema combines repository setup with independent validation,
+    allowing both vanilla and walkthrough agents to be evaluated objectively.
+    """
+    # Core identification
+    instance_id: str = Field(description="Unique task identifier (e.g., 'fastapi-first-steps')")
+
+    # Repository details
     repo_url: str = Field(description="GitHub repository URL")
-    branch: str = Field(description="Git branch to checkout")
-    docs_folder: str = Field(description="Path to docs within repo")
-    target_doc: str = Field(description="Specific doc file to use (relative to docs_folder)")
-    validation: TaskValidation = Field(description="How to verify success")
+    base_commit: str = Field(description="Specific commit hash for reproducibility")
+    language: str = Field(description="Programming language (e.g., 'python', 'javascript')")
+
+    # Environment specification
+    base_image: str = Field(default="ubuntu:22.04", description="Docker base image")
+
+    # Task description
+    problem_statement: str = Field(description="Full task description with constraints and requirements")
+    notes: str = Field(description="Brief task summary for humans")
+
+    # Documentation paths (for walkthrough generation)
+    docs_folder: str = Field(description="Path to docs within repo (e.g., 'docs/en')")
+    target_doc: str = Field(description="Specific doc file (e.g., 'tutorial/first-steps.md')")
+
+    # Validation (SetupBench-style deterministic validation)
+    success_command: str = Field(description="Shell command to verify task completion")
+    timeout_seconds: int = Field(default=300, description="Validation timeout in seconds")
+
+    # Ground truth (optional but valuable for analysis)
+    build_commands: Optional[List[str]] = Field(None, description="Expected build steps for reference")
+
+    # Metadata
     metadata: Optional[Dict[str, Any]] = Field(None, description="Additional metadata")
 
 
@@ -77,14 +91,28 @@ class ToolCallStats(BaseModel):
 
 
 class AgentResult(BaseModel):
-    """Result of running a single agent (vanilla or walkthrough)."""
+    """
+    Result of running a single agent with SetupBench-style validation.
+
+    Tracks both agent execution (did it complete?) and independent validation
+    (did the setup actually work?). True success requires both.
+    """
     agent_type: Literal["vanilla", "walkthrough"]
     task_id: str
 
-    # Execution outcome
-    success: bool
+    # Agent execution outcome
+    agent_completed: bool = Field(description="Did agent finish without errors?")
     duration_seconds: float
     exit_code: int
+
+    # Independent validation outcome (SetupBench-style)
+    validation_passed: bool = Field(description="Did validation command succeed?")
+    validation_output: Optional[str] = Field(None, description="Output from success_command")
+    validation_exit_code: Optional[int] = Field(None, description="Exit code from success_command")
+    validation_duration: Optional[float] = Field(None, description="Time spent validating (seconds)")
+
+    # Overall success (BOTH agent_completed AND validation_passed must be True)
+    success: bool = Field(description="True if both agent completed AND validation passed")
 
     # Error info
     error_message: Optional[str] = None

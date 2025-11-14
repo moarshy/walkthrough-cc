@@ -1,0 +1,101 @@
+{
+  "metadata": {
+    "name": "FastAPI Tutorial Tasks",
+    "description": "Progressive tasks covering FastAPI tutorial sections for vanilla vs walkthrough agent comparison",
+    "library": "FastAPI",
+    "version": "0.100",
+    "created": "2025-01-14",
+    "total_tasks": 5
+  },
+  "tasks": [
+    {
+      "instance_id": "fastapi-install-basic",
+      "repo_url": "https://github.com/tiangolo/fastapi",
+      "base_commit": "d78b5e872c8a9e5f6ccf21932e3e4e0a2b5f4c3d",
+      "language": "python",
+      "base_image": "ubuntu:22.04",
+      "problem_statement": "Install FastAPI and uvicorn packages in a fresh Ubuntu 22.04 environment.\n\nEnvironment: Fresh Ubuntu 22.04 with no preinstalled Python packages.\n\nConstraints:\n- Install all dependencies globally (no virtual environments)\n- Non-interactive setup suitable for headless CI\n- You have root privileges (no need for sudo)\n\nTask: Install FastAPI and uvicorn with standard extras. Verify that both packages can be imported successfully in Python.",
+      "notes": "Dependency installation only - verify packages can be imported",
+      "docs_folder": "docs/en/docs",
+      "target_doc": "index.md",
+      "success_command": "python3 -c 'import fastapi; import uvicorn; print(f\"FastAPI {fastapi.__version__}\")' && echo 'Setup successful' || echo 'Setup failed'",
+      "timeout_seconds": 300,
+      "build_commands": [
+        "apt-get update && apt-get install -y python3 python3-pip",
+        "pip3 install fastapi 'uvicorn[standard]'"
+      ]
+    },
+    {
+      "instance_id": "fastapi-first-steps",
+      "repo_url": "https://github.com/tiangolo/fastapi",
+      "base_commit": "d78b5e872c8a9e5f6ccf21932e3e4e0a2b5f4c3d",
+      "language": "python",
+      "base_image": "ubuntu:22.04",
+      "problem_statement": "Follow the FastAPI First Steps tutorial to create a basic API application.\n\nEnvironment: Fresh Ubuntu 22.04 with no preinstalled Python packages.\n\nConstraints:\n- Install all dependencies globally (no virtual environments)\n- Non-interactive setup suitable for headless CI\n- You have root privileges\n\nTask:\n1. Install FastAPI and uvicorn\n2. Create a file named main.py with a FastAPI application\n3. The application should have a root endpoint (GET /) that returns {\"Hello\": \"World\"}\n4. The server must start and respond correctly to HTTP requests\n\nValidation: The server will be started, tested with curl, and then stopped.",
+      "notes": "Basic FastAPI app with single GET endpoint at root path",
+      "docs_folder": "docs/en/docs",
+      "target_doc": "tutorial/first-steps.md",
+      "success_command": "timeout 10 bash -c 'uvicorn main:app --host 0.0.0.0 --port 8000 & sleep 3 && curl -s http://localhost:8000 | grep -q \"Hello.*World\" && killall -9 uvicorn' && echo 'Setup successful' || echo 'Setup failed'",
+      "timeout_seconds": 300,
+      "build_commands": [
+        "apt-get update && apt-get install -y python3 python3-pip curl",
+        "pip3 install fastapi 'uvicorn[standard]'",
+        "cat > main.py << 'EOF'\nfrom fastapi import FastAPI\n\napp = FastAPI()\n\n@app.get(\"/\")\ndef read_root():\n    return {\"Hello\": \"World\"}\nEOF"
+      ]
+    },
+    {
+      "instance_id": "fastapi-path-parameters",
+      "repo_url": "https://github.com/tiangolo/fastapi",
+      "base_commit": "d78b5e872c8a9e5f6ccf21932e3e4e0a2b5f4c3d",
+      "language": "python",
+      "base_image": "ubuntu:22.04",
+      "problem_statement": "Follow the FastAPI Path Parameters tutorial to implement dynamic URL paths.\n\nEnvironment: Fresh Ubuntu 22.04 with no preinstalled Python packages.\n\nConstraints:\n- Install all dependencies globally (no virtual environments)\n- Non-interactive setup\n- You have root privileges\n\nTask:\n1. Install FastAPI and uvicorn\n2. Create main.py with a FastAPI application\n3. Implement an endpoint: GET /items/{item_id}\n4. The endpoint should accept item_id as an integer path parameter\n5. The endpoint should return {\"item_id\": item_id}\n6. Verify the server responds correctly with the path parameter value\n\nValidation: Server will be tested with item_id=42 and checked for correct response.",
+      "notes": "Path parameters tutorial - dynamic URL paths with type validation",
+      "docs_folder": "docs/en/docs",
+      "target_doc": "tutorial/path-params.md",
+      "success_command": "timeout 10 bash -c 'uvicorn main:app --host 0.0.0.0 --port 8000 & sleep 3 && curl -s http://localhost:8000/items/42 | grep -q \"\\\"item_id\\\":42\" && killall -9 uvicorn' && echo 'Setup successful' || echo 'Setup failed'",
+      "timeout_seconds": 300,
+      "build_commands": [
+        "apt-get update && apt-get install -y python3 python3-pip curl",
+        "pip3 install fastapi 'uvicorn[standard]'",
+        "cat > main.py << 'EOF'\nfrom fastapi import FastAPI\n\napp = FastAPI()\n\n@app.get(\"/items/{item_id}\")\ndef read_item(item_id: int):\n    return {\"item_id\": item_id}\nEOF"
+      ]
+    },
+    {
+      "instance_id": "fastapi-query-parameters",
+      "repo_url": "https://github.com/tiangolo/fastapi",
+      "base_commit": "d78b5e872c8a9e5f6ccf21932e3e4e0a2b5f4c3d",
+      "language": "python",
+      "base_image": "ubuntu:22.04",
+      "problem_statement": "Follow the FastAPI Query Parameters tutorial to implement URL query string handling.\n\nEnvironment: Fresh Ubuntu 22.04 with no preinstalled Python packages.\n\nConstraints:\n- Install all dependencies globally (no virtual environments)\n- Non-interactive setup\n- You have root privileges\n\nTask:\n1. Install FastAPI and uvicorn\n2. Create main.py with a FastAPI application\n3. Implement an endpoint: GET /items\n4. The endpoint should accept query parameters: skip (int, default 0) and limit (int, default 10)\n5. The endpoint should return {\"skip\": skip, \"limit\": limit}\n6. Verify the server responds correctly with query parameter values\n\nValidation: Server will be tested with skip=5&limit=20 and checked for correct response.",
+      "notes": "Query parameters tutorial - URL query strings with defaults",
+      "docs_folder": "docs/en/docs",
+      "target_doc": "tutorial/query-params.md",
+      "success_command": "timeout 10 bash -c 'uvicorn main:app --host 0.0.0.0 --port 8000 & sleep 3 && curl -s \"http://localhost:8000/items?skip=5&limit=20\" | grep -q \"\\\"skip\\\":5.*\\\"limit\\\":20\" && killall -9 uvicorn' && echo 'Setup successful' || echo 'Setup failed'",
+      "timeout_seconds": 300,
+      "build_commands": [
+        "apt-get update && apt-get install -y python3 python3-pip curl",
+        "pip3 install fastapi 'uvicorn[standard]'",
+        "cat > main.py << 'EOF'\nfrom fastapi import FastAPI\n\napp = FastAPI()\n\n@app.get(\"/items\")\ndef read_items(skip: int = 0, limit: int = 10):\n    return {\"skip\": skip, \"limit\": limit}\nEOF"
+      ]
+    },
+    {
+      "instance_id": "fastapi-request-body",
+      "repo_url": "https://github.com/tiangolo/fastapi",
+      "base_commit": "d78b5e872c8a9e5f6ccf21932e3e4e0a2b5f4c3d",
+      "language": "python",
+      "base_image": "ubuntu:22.04",
+      "problem_statement": "Follow the FastAPI Request Body tutorial to implement POST endpoint with Pydantic validation.\n\nEnvironment: Fresh Ubuntu 22.04 with no preinstalled Python packages.\n\nConstraints:\n- Install all dependencies globally (no virtual environments)\n- Non-interactive setup\n- You have root privileges\n\nTask:\n1. Install FastAPI, uvicorn, and pydantic\n2. Create main.py with a FastAPI application\n3. Define a Pydantic model 'Item' with fields:\n   - name: str (required)\n   - description: Optional[str] (optional)\n   - price: float (required)\n4. Implement endpoint: POST /items/ that accepts an Item in the request body\n5. The endpoint should return the received item\n6. Verify the server accepts and validates JSON POST requests correctly\n\nValidation: Server will receive POST with {\"name\":\"Test\",\"price\":42.5} and verify response.",
+      "notes": "Request body tutorial - POST with Pydantic model validation",
+      "docs_folder": "docs/en/docs",
+      "target_doc": "tutorial/body.md",
+      "success_command": "timeout 10 bash -c 'uvicorn main:app --host 0.0.0.0 --port 8000 & sleep 3 && curl -s -X POST http://localhost:8000/items/ -H \"Content-Type: application/json\" -d \"{\\\"name\\\":\\\"Test\\\",\\\"price\\\":42.5}\" | grep -q \"\\\"name\\\":\\\"Test\\\".*\\\"price\\\":42.5\" && killall -9 uvicorn' && echo 'Setup successful' || echo 'Setup failed'",
+      "timeout_seconds": 300,
+      "build_commands": [
+        "apt-get update && apt-get install -y python3 python3-pip curl",
+        "pip3 install fastapi 'uvicorn[standard]' pydantic",
+        "cat > main.py << 'EOF'\nfrom fastapi import FastAPI\nfrom pydantic import BaseModel\nfrom typing import Optional\n\napp = FastAPI()\n\nclass Item(BaseModel):\n    name: str\n    description: Optional[str] = None\n    price: float\n\n@app.post(\"/items/\")\ndef create_item(item: Item):\n    return item\nEOF"
+      ]
+    }
+  ]
+}

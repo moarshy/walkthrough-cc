@@ -13,7 +13,8 @@ from pathlib import Path
 from typing import Optional, Dict, Any, Literal
 from datetime import datetime
 
-from .schemas import Task, AgentResult, TokenUsage, ToolCallStats
+from .schemas_defs import Task, AgentResult, TokenUsage, ToolCallStats
+from .validation_harness import ValidationHarness
 
 logger = logging.getLogger(__name__)
 
@@ -80,9 +81,9 @@ class DockerHarness:
         start_time = time.time()
         started_at = datetime.now().isoformat()
 
-        container_name = f"cc-agent-{task.id}-{agent_type}-{int(time.time())}"
+        container_name = f"cc-agent-{task.instance_id}-{agent_type}-{int(time.time())}"
 
-        logger.info(f"🐳 Starting {agent_type} agent for task {task.id}")
+        logger.info(f"🐳 Starting {agent_type} agent for task {task.instance_id}")
         logger.info(f"   Container: {container_name}")
 
         # Setup volumes
@@ -101,13 +102,13 @@ class DockerHarness:
 
         # Prepare task JSON for container
         task_json = json.dumps({
-            'id': task.id,
-            'library_name': task.library_name,
-            'library_version': task.library_version,
+            'instance_id': task.instance_id,
             'target_doc': task.target_doc,
             'repo_url': task.repo_url,
-            'branch': task.branch,
-            'docs_folder': task.docs_folder
+            'base_commit': task.base_commit,
+            'docs_folder': task.docs_folder,
+            'problem_statement': task.problem_statement,
+            'notes': task.notes
         })
 
         # Setup environment (minimal - most passed via command args)
@@ -150,21 +151,51 @@ class DockerHarness:
 
             # Parse execution results
             duration = time.time() - start_time
-            success = exit_code == 0
+            agent_completed = exit_code == 0
 
             # Extract token usage and tool calls from logs
             token_usage, tool_calls = self._parse_agent_logs(log_dir)
 
-            # Determine error
+            # Determine agent error
             error_message = None
             error_type = None
-            if not success:
+            if not agent_completed:
                 error_message = self._extract_error_from_logs(logs, exit_code)
                 error_type = self._classify_error(exit_code, error_message)
 
+            # ========== SETUPBENCH-STYLE VALIDATION ==========
+            # Run independent validation harness to check if setup actually works
+            validation_start = time.time()
+            validation_passed = False
+            validation_output = ""
+            validation_exit_code = -1
+
+            if agent_completed:
+                logger.info(f"   Running validation harness...")
+                validator = ValidationHarness()
+                validation_passed, validation_output, validation_exit_code = validator.validate_and_log(
+                    task=task,
+                    workspace_dir=repo_path,
+                    log_path=log_dir / f"{agent_type}_validation.log"
+                )
+                logger.info(f"   Validation: {'✅ PASSED' if validation_passed else '❌ FAILED'}")
+            else:
+                logger.info(f"   Skipping validation (agent did not complete)")
+                validation_output = "Validation skipped - agent did not complete"
+
+            validation_duration = time.time() - validation_start
+
+            # Overall success = BOTH agent completed AND validation passed
+            success = agent_completed and validation_passed
+
             return AgentResult(
                 agent_type=agent_type,
-                task_id=task.id,
+                task_id=task.instance_id,  # Updated to use instance_id
+                agent_completed=agent_completed,
+                validation_passed=validation_passed,
+                validation_output=validation_output,
+                validation_exit_code=validation_exit_code,
+                validation_duration=validation_duration,
                 success=success,
                 duration_seconds=duration,
                 exit_code=exit_code,
@@ -353,10 +384,15 @@ class DockerHarness:
         error_message: str,
         error_type: str
     ) -> AgentResult:
-        """Create an error result."""
+        """Create an error result (agent failed to run)."""
         return AgentResult(
             agent_type=agent_type,
-            task_id=task.id,
+            task_id=task.instance_id,  # Updated to use instance_id
+            agent_completed=False,
+            validation_passed=False,
+            validation_output="Validation skipped - agent failed to run",
+            validation_exit_code=-1,
+            validation_duration=0.0,
             success=False,
             duration_seconds=time.time() - start_time,
             exit_code=-1,
