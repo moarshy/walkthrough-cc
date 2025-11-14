@@ -22,6 +22,9 @@ dependencies = [
 
     # Claude SDK (will be installed in Docker container)
     "anthropic>=0.30.0",
+
+    # Documentation parsing
+    "pyyaml>=6.0.0",
 ]
 
 [project.optional-dependencies]

@@ -6,9 +6,11 @@ Uses Claude Code agent SDK to generate step-by-step walkthroughs for AI agents.
 import json
 import time
 import asyncio
+import re
+import yaml
 from pathlib import Path
 from datetime import datetime
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, List
 
 from claude_agent_sdk import (
     ClaudeSDKClient,
@@ -19,12 +21,314 @@ from claude_agent_sdk import (
 
 
 # ============================================================================
+# DOCUMENT RESOLVERS
+# ============================================================================
+
+class MkDocsResolver:
+    """Resolves MkDocs PyMdown Extensions snippet references."""
+
+    # Matches: --8<-- "path/to/file.py"
+    SNIPPET_PATTERN = re.compile(r'--8<--\s+"([^"]+)"')
+
+    def resolve(
+        self,
+        content: str,
+        doc_path: Path,
+        repo_path: Path,
+        docs_folder: str
+    ) -> Dict[str, Any]:
+        """Resolve --8<-- snippet references."""
+
+        # Parse mkdocs.yml for base_path config
+        config = self._parse_mkdocs_config(repo_path)
+        base_path = config.get('base_path', repo_path / docs_folder)
+
+        snippets_resolved = []
+        resolved_content = content
+
+        # Find all snippet references
+        for match in self.SNIPPET_PATTERN.finditer(content):
+            snippet_ref = match.group(1)
+            snippet_path = self._resolve_path(snippet_ref, doc_path, base_path, repo_path)
+
+            if snippet_path and snippet_path.exists():
+                try:
+                    with open(snippet_path, 'r', encoding='utf-8') as f:
+                        snippet_content = f.read()
+
+                    # Replace reference with actual content
+                    # Preserve it as a code block
+                    replacement = f"\n```\n{snippet_content}\n```\n"
+                    resolved_content = resolved_content.replace(
+                        match.group(0),
+                        replacement
+                    )
+
+                    snippets_resolved.append({
+                        'reference': snippet_ref,
+                        'resolved_path': str(snippet_path.relative_to(repo_path)),
+                        'lines': len(snippet_content.splitlines())
+                    })
+                except Exception as e:
+                    # Log but continue if snippet can't be read
+                    snippets_resolved.append({
+                        'reference': snippet_ref,
+                        'error': str(e)
+                    })
+
+        return {
+            'content': resolved_content,
+            'format': 'mkdocs',
+            'snippets_resolved': snippets_resolved,
+            'resolution_notes': f"Resolved {len([s for s in snippets_resolved if 'error' not in s])} MkDocs snippets"
+        }
+
+    def _parse_mkdocs_config(self, repo_path: Path) -> Dict:
+        """Parse mkdocs.yml configuration."""
+        config_path = repo_path / 'mkdocs.yml'
+        if not config_path.exists():
+            config_path = repo_path / 'mkdocs.yaml'
+
+        if not config_path.exists():
+            return {}
+
+        try:
+            with open(config_path, 'r', encoding='utf-8') as f:
+                config = yaml.safe_load(f)
+
+            # Extract pymdownx.snippets settings
+            extensions = config.get('markdown_extensions', [])
+            for ext in extensions:
+                if isinstance(ext, dict) and 'pymdownx.snippets' in ext:
+                    return ext['pymdownx.snippets']
+        except Exception:
+            pass
+
+        return {}
+
+    def _resolve_path(
+        self,
+        snippet_ref: str,
+        doc_path: Path,
+        base_path: Path,
+        repo_path: Path
+    ) -> Optional[Path]:
+        """Resolve snippet reference to actual file path."""
+        # Try multiple resolution strategies
+
+        # 1. Relative to doc file
+        relative_to_doc = doc_path.parent / snippet_ref
+        if relative_to_doc.exists():
+            return relative_to_doc
+
+        # 2. Relative to base_path
+        relative_to_base = base_path / snippet_ref
+        if relative_to_base.exists():
+            return relative_to_base
+
+        # 3. Relative to repo root
+        relative_to_repo = repo_path / snippet_ref
+        if relative_to_repo.exists():
+            return relative_to_repo
+
+        return None
+
+
+class DocusaurusResolver:
+    """Resolves Docusaurus MDX code imports."""
+
+    # Matches: import CodeExample from '!!raw-loader!./example.js';
+    IMPORT_PATTERN = re.compile(r"import\s+(\w+)\s+from\s+['\"]!!raw-loader!([^'\"]+)['\"];?")
+
+    def resolve(
+        self,
+        content: str,
+        doc_path: Path,
+        repo_path: Path,
+        docs_folder: str
+    ) -> Dict[str, Any]:
+        """Resolve MDX raw-loader imports."""
+
+        snippets_resolved = []
+        resolved_content = content
+
+        # Find all import statements
+        for match in self.IMPORT_PATTERN.finditer(content):
+            var_name = match.group(1)
+            import_path = match.group(2)
+
+            # Resolve relative import
+            if import_path.startswith('./') or import_path.startswith('../'):
+                snippet_path = (doc_path.parent / import_path).resolve()
+            else:
+                snippet_path = repo_path / import_path
+
+            if snippet_path.exists():
+                try:
+                    with open(snippet_path, 'r', encoding='utf-8') as f:
+                        snippet_content = f.read()
+
+                    # Find usages like <CodeBlock>{VarName}</CodeBlock>
+                    # Replace with actual content
+                    usage_pattern = re.compile(
+                        rf'<CodeBlock[^>]*>\{{{var_name}\}}</CodeBlock>',
+                        re.DOTALL
+                    )
+
+                    replacement = f"\n```\n{snippet_content}\n```\n"
+                    resolved_content = usage_pattern.sub(replacement, resolved_content)
+
+                    snippets_resolved.append({
+                        'reference': import_path,
+                        'resolved_path': str(snippet_path.relative_to(repo_path)),
+                        'lines': len(snippet_content.splitlines())
+                    })
+                except Exception as e:
+                    snippets_resolved.append({
+                        'reference': import_path,
+                        'error': str(e)
+                    })
+
+        return {
+            'content': resolved_content,
+            'format': 'docusaurus',
+            'snippets_resolved': snippets_resolved,
+            'resolution_notes': f"Resolved {len([s for s in snippets_resolved if 'error' not in s])} Docusaurus imports"
+        }
+
+
+class SphinxResolver:
+    """Resolves Sphinx literalinclude directives."""
+
+    # Matches: .. literalinclude:: path/to/file.py
+    LITERAL_PATTERN = re.compile(
+        r'\.\.\s+literalinclude::\s+([^\n]+)\n(?:\s+:[^\n]+\n)*',
+        re.MULTILINE
+    )
+
+    def resolve(
+        self,
+        content: str,
+        doc_path: Path,
+        repo_path: Path,
+        docs_folder: str
+    ) -> Dict[str, Any]:
+        """Resolve literalinclude directives."""
+
+        snippets_resolved = []
+        resolved_content = content
+
+        for match in self.LITERAL_PATTERN.finditer(content):
+            include_path = match.group(1).strip()
+
+            # Resolve relative to doc or repo root
+            if include_path.startswith('../') or include_path.startswith('./'):
+                snippet_path = (doc_path.parent / include_path).resolve()
+            else:
+                snippet_path = repo_path / include_path
+
+            if snippet_path.exists():
+                try:
+                    with open(snippet_path, 'r', encoding='utf-8') as f:
+                        snippet_content = f.read()
+
+                    # Replace entire literalinclude directive with code block
+                    replacement = f"\n```\n{snippet_content}\n```\n"
+                    resolved_content = resolved_content.replace(
+                        match.group(0),
+                        replacement
+                    )
+
+                    snippets_resolved.append({
+                        'reference': include_path,
+                        'resolved_path': str(snippet_path.relative_to(repo_path)),
+                        'lines': len(snippet_content.splitlines())
+                    })
+                except Exception as e:
+                    snippets_resolved.append({
+                        'reference': include_path,
+                        'error': str(e)
+                    })
+
+        return {
+            'content': resolved_content,
+            'format': 'sphinx',
+            'snippets_resolved': snippets_resolved,
+            'resolution_notes': f"Resolved {len([s for s in snippets_resolved if 'error' not in s])} Sphinx literalincludes"
+        }
+
+
+class DocumentResolver:
+    """Detects documentation format and resolves external code snippets."""
+
+    FORMATS = {
+        'mkdocs': ['mkdocs.yml', 'mkdocs.yaml'],
+        'docusaurus': ['docusaurus.config.js', 'docusaurus.config.ts', 'sidebars.js'],
+        'sphinx': ['conf.py', 'source/conf.py'],
+        'hugo': ['config.toml', 'config.yaml', 'hugo.toml'],
+        'vuepress': ['.vuepress/config.js', '.vuepress/config.ts']
+    }
+
+    def detect_format(self, repo_path: Path) -> str:
+        """Detect documentation format by config files."""
+        for format_name, config_files in self.FORMATS.items():
+            for config_file in config_files:
+                if (repo_path / config_file).exists():
+                    return format_name
+        return 'unknown'
+
+    def resolve_content(
+        self,
+        doc_path: Path,
+        repo_path: Path,
+        docs_folder: str
+    ) -> Dict[str, Any]:
+        """Resolve all external code snippet references in documentation."""
+
+        doc_format = self.detect_format(repo_path)
+
+        with open(doc_path, 'r', encoding='utf-8') as f:
+            original_content = f.read()
+
+        resolver = self._get_resolver(doc_format)
+        if resolver is None:
+            # No resolution needed
+            return {
+                'content': original_content,
+                'format': doc_format,
+                'snippets_resolved': [],
+                'resolution_notes': 'No external snippets detected or resolver available'
+            }
+
+        resolved = resolver.resolve(
+            content=original_content,
+            doc_path=doc_path,
+            repo_path=repo_path,
+            docs_folder=docs_folder
+        )
+
+        return resolved
+
+    def _get_resolver(self, doc_format: str):
+        """Get appropriate resolver for doc format."""
+        resolvers = {
+            'mkdocs': MkDocsResolver(),
+            'docusaurus': DocusaurusResolver(),
+            'sphinx': SphinxResolver(),
+        }
+        return resolvers.get(doc_format)
+
+
+# ============================================================================
 # PROMPT TEMPLATES
 # ============================================================================
 
 GENERATION_SYSTEM_PROMPT = """You are an expert technical writer and documentation analyst specializing in creating interactive walkthroughs from documentation.
 
 Your task is to analyze tutorial/quickstart documentation and convert it into a structured step-by-step walkthrough that a Claude Code agent can execute.
+
+**DOCUMENTATION FORMAT AWARENESS:**
+You may receive documentation from various generators (MkDocs, Docusaurus, Sphinx, etc.). External code snippet references have been RESOLVED and inlined for you. If you see resolution metadata, it means code snippets were imported from separate files and are now embedded in the content you're analyzing.
 
 CRITICAL REQUIREMENTS:
 
@@ -39,18 +343,24 @@ CRITICAL REQUIREMENTS:
    - **operationsForAgent**: Specific commands/actions to execute (be explicit and concrete)
    - **introductionForAgent**: Purpose and goals of the step
 
-3. **Be Specific in Operations**:
+3. **Handle Code Snippets Properly**:
+   - Code blocks may have been imported from external files (check resolution metadata)
+   - Preserve all code examples exactly as provided
+   - Note file paths if specified in resolution metadata
+   - Include setup/prerequisites for code execution
+
+4. **Be Specific in Operations**:
    - Use exact commands (e.g., "Run: npm install", not "Install dependencies")
    - Include error handling guidance
    - Note when to wait for user confirmation
    - Specify what success looks like
 
-4. **Maintain Context**:
+5. **Maintain Context**:
    - Each step should make sense standalone
    - Reference prerequisites from earlier steps
    - Note dependencies between steps
 
-5. **Output Format**: You MUST use the Write tool to save valid JSON to the specified output file
+6. **Output Format**: You MUST use the Write tool to save valid JSON to the specified output file
 
 You are thorough and precise. Create walkthroughs that enable successful execution by AI agents.
 """
@@ -60,6 +370,8 @@ GENERATION_PROMPT_TEMPLATE = """Analyze the following documentation and create a
 Library: {library_name}
 Version: {library_version}
 Task: {task_description}
+Documentation Path: {doc_location_info}
+Documentation Content Info: {doc_content_info}
 
 Documentation content:
 ```markdown
@@ -134,13 +446,17 @@ class WalkthroughGenerator:
         # SDK uses ANTHROPIC_API_KEY from environment
         import os
         os.environ['ANTHROPIC_API_KEY'] = api_key
+        self.resolver = DocumentResolver()
 
     def generate_from_doc(
         self,
         doc_content: str,
         library_name: str,
         task_description: str,
-        output_file: Optional[Path] = None
+        output_file: Optional[Path] = None,
+        resolution_metadata: Optional[Dict[str, Any]] = None,
+        doc_path: Optional[Path] = None,
+        repo_path: Optional[Path] = None
     ) -> Dict[str, Any]:
         """
         Generate walkthrough from documentation content.
@@ -150,12 +466,16 @@ class WalkthroughGenerator:
             library_name: Name of the library/framework
             task_description: What the user is trying to accomplish
             output_file: Path to save the walkthrough JSON (optional)
+            resolution_metadata: Metadata about resolved code snippets (optional)
+            doc_path: Path to the original doc file (optional, for context)
+            repo_path: Path to the repository root (optional, for context)
 
         Returns:
             Structured walkthrough JSON dict
         """
         return asyncio.run(self._generate_async(
-            doc_content, library_name, task_description, output_file
+            doc_content, library_name, task_description, output_file,
+            resolution_metadata, doc_path, repo_path
         ))
 
     async def _generate_async(
@@ -163,7 +483,10 @@ class WalkthroughGenerator:
         doc_content: str,
         library_name: str,
         task_description: str,
-        output_file: Optional[Path]
+        output_file: Optional[Path],
+        resolution_metadata: Optional[Dict[str, Any]] = None,
+        doc_path: Optional[Path] = None,
+        repo_path: Optional[Path] = None
     ) -> Dict[str, Any]:
         """Async implementation of walkthrough generation."""
 
@@ -179,6 +502,28 @@ class WalkthroughGenerator:
 
         output_file.parent.mkdir(parents=True, exist_ok=True)
 
+        # Prepare doc location info
+        doc_location_info = ""
+        if doc_path and repo_path:
+            relative_path = doc_path.relative_to(repo_path)
+            doc_location_info = str(relative_path)
+        elif doc_path:
+            doc_location_info = str(doc_path)
+
+        # Prepare doc content info for prompt
+        doc_content_info = ""
+        if resolution_metadata and resolution_metadata.get('snippets_resolved'):
+            doc_content_info = f"""Format: {resolution_metadata.get('format', 'unknown')}
+Snippets Resolved: {len(resolution_metadata['snippets_resolved'])}
+Resolution Notes: {resolution_metadata.get('resolution_notes', 'N/A')}
+
+External code snippets have been automatically resolved and inlined:
+```json
+{json.dumps(resolution_metadata['snippets_resolved'], indent=2)}
+```"""
+        else:
+            doc_content_info = "Format: plain markdown, no external snippets detected"
+
         # Create Claude SDK client
         options = ClaudeAgentOptions(
             system_prompt=GENERATION_SYSTEM_PROMPT,
@@ -193,6 +538,8 @@ class WalkthroughGenerator:
                 library_name=library_name,
                 library_version="latest",
                 task_description=task_description,
+                doc_location_info=doc_location_info,
+                doc_content_info=doc_content_info,
                 content=doc_content,
                 timestamp=now_iso,
                 created_at=now_ms,
@@ -205,7 +552,7 @@ class WalkthroughGenerator:
             await client.query(prompt)
 
             # Wait for agent to complete (it will use Write tool)
-            async for message in client.receive_response():
+            async for _message in client.receive_response():
                 pass  # Agent will write the file
 
         # Load the generated file
@@ -222,7 +569,9 @@ class WalkthroughGenerator:
         doc_path: Path,
         library_name: str,
         task_description: str,
-        output_file: Optional[Path] = None
+        output_file: Optional[Path] = None,
+        repo_path: Optional[Path] = None,
+        docs_folder: str = "docs"
     ) -> Dict[str, Any]:
         """
         Generate walkthrough from a documentation file.
@@ -232,11 +581,37 @@ class WalkthroughGenerator:
             library_name: Name of the library/framework
             task_description: What the user is trying to accomplish
             output_file: Path to save the walkthrough JSON (optional)
+            repo_path: Path to repository root for resolving external snippets (optional)
+            docs_folder: Name of docs folder within repo (default: "docs")
 
         Returns:
             Structured walkthrough JSON dict
         """
-        with open(doc_path, 'r', encoding='utf-8') as f:
-            content = f.read()
+        # Resolve external snippets if repo_path provided
+        if repo_path:
+            resolved = self.resolver.resolve_content(
+                doc_path=doc_path,
+                repo_path=repo_path,
+                docs_folder=docs_folder
+            )
+            content = resolved['content']
+            metadata = {
+                'doc_format': resolved['format'],
+                'snippets_resolved': resolved['snippets_resolved'],
+                'resolution_notes': resolved['resolution_notes']
+            }
+        else:
+            # Fallback: just read file
+            with open(doc_path, 'r', encoding='utf-8') as f:
+                content = f.read()
+            metadata = None
 
-        return self.generate_from_doc(content, library_name, task_description, output_file)
+        return self.generate_from_doc(
+            content,
+            library_name,
+            task_description,
+            output_file,
+            resolution_metadata=metadata,
+            doc_path=doc_path,
+            repo_path=repo_path
+        )
