@@ -3,13 +3,11 @@ Harness modules for running agents in controlled environments.
 
 This module provides:
 - Docker-based execution harness for isolated agent runs
-- Independent validation harness for verifying task completion
+- In-container validation (see run_agent_in_container.py)
 """
 
 from .docker_harness import DockerHarness
-from .validation_harness import ValidationHarness
 
 __all__ = [
     'DockerHarness',
-    'ValidationHarness',
 ]

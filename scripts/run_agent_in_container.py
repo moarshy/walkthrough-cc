@@ -21,7 +21,7 @@ if __name__ == "__main__":
         sys.exit(1)
 
     agent_type = sys.argv[1]
-    task_json = sys.argv[2]  # Currently unused - task info comes from mounted files
+    task_json = sys.argv[2]  # Task JSON containing success_command for validation
     api_key = sys.argv[3]
 
     if agent_type not in ["vanilla", "walkthrough"]:
@@ -79,6 +79,42 @@ if __name__ == "__main__":
         print(f"   Command: {success_command}")
 
         try:
+            # Cleanup: Kill all background jobs and their child processes
+            # This ensures validation runs in a clean state without port/resource conflicts
+            # Generic approach: Works for uvicorn, node, rails, django, etc.
+            print(f"   Cleaning up background processes...")
+
+            cleanup_command = """
+# Kill all background jobs started during agent execution
+# This finds processes that are detached (no controlling terminal) or running as background jobs
+# Works for: web servers (uvicorn, gunicorn, node, rails), databases, daemons, etc.
+
+# Get list of background bash shells (from run_in_background tools)
+BG_SHELLS=$(jobs -p 2>/dev/null || true)
+
+# Kill background shells and their entire process trees
+for pid in $BG_SHELLS; do
+    if [ -n "$pid" ] && kill -0 $pid 2>/dev/null; then
+        # Kill entire process tree (parent + all children)
+        pkill -9 -P $pid 2>/dev/null || true
+        kill -9 $pid 2>/dev/null || true
+    fi
+done
+
+# Also kill any processes listening on network ports (likely servers)
+# This catches servers that might not be direct children of bash
+lsof -ti:8000-8999 2>/dev/null | xargs -r kill -9 2>/dev/null || true
+
+sleep 1
+"""
+            subprocess.run(
+                cleanup_command,
+                shell=True,
+                cwd="/workspace/repo",
+                capture_output=True,
+                timeout=10
+            )
+
             # Run validation command in /workspace/repo
             validation_result = subprocess.run(
                 success_command,

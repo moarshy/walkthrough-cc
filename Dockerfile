@@ -13,6 +13,8 @@ RUN apt-get update && apt-get install -y \
     wget \
     build-essential \
     ca-certificates \
+    lsof \
+    procps \
     && rm -rf /var/lib/apt/lists/*
 
 # Install Node.js 20.x (required for latest npm and Claude Code CLI)

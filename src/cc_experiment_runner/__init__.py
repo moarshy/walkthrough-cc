@@ -29,7 +29,7 @@ from .schemas import (
 try:
     from .agents import WalkthroughGenerator
     from .repository_manager import RepositoryManager, RunContext
-    from .harness import DockerHarness, ValidationHarness
+    from .harness import DockerHarness
     __all__ = [
         "Task",
         "AgentResult",
@@ -38,7 +38,6 @@ try:
         "TokenUsage",
         "ToolCallStats",
         "DockerHarness",
-        "ValidationHarness",
         "WalkthroughGenerator",
         "RepositoryManager",
         "RunContext",

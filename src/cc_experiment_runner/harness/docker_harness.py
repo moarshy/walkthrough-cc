@@ -14,7 +14,6 @@ from typing import Optional, Dict, Any, Literal
 from datetime import datetime
 
 from ..schemas import Task, AgentResult, TokenUsage, ToolCallStats
-from .validation_harness import ValidationHarness
 
 logger = logging.getLogger(__name__)
 
