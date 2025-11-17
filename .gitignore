@@ -48,3 +48,4 @@ repos/
 
 # Docker
 .dockerignore
+experiments/

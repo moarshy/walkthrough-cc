@@ -100,7 +100,7 @@ class DockerHarness:
                 'mode': 'ro'
             }
 
-        # Prepare task JSON for container
+        # Prepare task JSON for container (including success_command for validation)
         task_json = json.dumps({
             'instance_id': task.instance_id,
             'target_doc': task.target_doc,
@@ -108,7 +108,8 @@ class DockerHarness:
             'base_commit': task.base_commit,
             'docs_folder': task.docs_folder,
             'problem_statement': task.problem_statement,
-            'notes': task.notes
+            'notes': task.notes,
+            'success_command': task.success_command  # ← Added for in-container validation
         })
 
         # Setup environment (minimal - most passed via command args)
@@ -163,27 +164,39 @@ class DockerHarness:
                 error_message = self._extract_error_from_logs(logs, exit_code)
                 error_type = self._classify_error(exit_code, error_message)
 
-            # ========== SETUPBENCH-STYLE VALIDATION ==========
-            # Run independent validation harness to check if setup actually works
-            validation_start = time.time()
+            # ========== VALIDATION NOW RUNS INSIDE CONTAINER ==========
+            # Validation runs in run_agent_in_container.py after agent completes
+            # This ensures both run in the same environment
+            logger.info(f"   Validation ran inside container (see container logs)")
+
+            # Parse validation results from metrics.json written by container
+            metrics_file = log_dir / "metrics.json"
             validation_passed = False
             validation_output = ""
             validation_exit_code = -1
+            validation_duration = 0
 
-            if agent_completed:
-                logger.info(f"   Running validation harness...")
-                validator = ValidationHarness()
-                validation_passed, validation_output, validation_exit_code = validator.validate_and_log(
-                    task=task,
-                    workspace_dir=repo_path,
-                    log_path=log_dir / f"{agent_type}_validation.log"
-                )
-                logger.info(f"   Validation: {'✅ PASSED' if validation_passed else '❌ FAILED'}")
+            if metrics_file.exists():
+                try:
+                    with open(metrics_file) as f:
+                        metrics = json.load(f)
+                        validation_passed = metrics.get('validation_passed', False)
+                        validation_exit_code = metrics.get('validation_exit_code', -1)
+
+                        # Read validation log for output
+                        validation_log = log_dir / f"{agent_type}_validation.log"
+                        if validation_log.exists():
+                            validation_output = validation_log.read_text()
+                        else:
+                            validation_output = "Validation log not found"
+
+                        logger.info(f"   Validation: {'✅ PASSED' if validation_passed else '❌ FAILED'}")
+                except Exception as e:
+                    logger.error(f"   Failed to parse validation results: {e}")
+                    validation_output = f"Failed to parse validation results: {e}"
             else:
-                logger.info(f"   Skipping validation (agent did not complete)")
-                validation_output = "Validation skipped - agent did not complete"
-
-            validation_duration = time.time() - validation_start
+                logger.warning(f"   Metrics file not found - validation status unknown")
+                validation_output = "Metrics file not found"
 
             # Overall success = BOTH agent completed AND validation passed
             success = agent_completed and validation_passed

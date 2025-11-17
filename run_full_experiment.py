@@ -40,6 +40,7 @@ print("="*70 + "\n")
 task = Task(
     instance_id="fastapi-first-steps",
     repo_url="https://github.com/tiangolo/fastapi",
+    branch="master",
     base_commit="d78b5e872c8a9e5f6ccf21932e3e4e0a2b5f4c3d",
     language="python",
     base_image="ubuntu:22.04",
@@ -70,8 +71,8 @@ def main():
         repo_url=task.repo_url,
         branch=task.branch,
         run_id="repo",  # Simple name: experiments/{uuid}/repo/
-        library_name=task.library_name,
-        library_version=task.library_version,
+        library_name="FastAPI",
+        library_version="0.100",
         docs_path=task.docs_folder
     )
 
@@ -90,15 +91,15 @@ def main():
 
         walkthrough_dir = experiment_dir / "walkthroughs"
         walkthrough_dir.mkdir(exist_ok=True)
-        walkthrough_file = walkthrough_dir / f"{task.id}.json"
+        walkthrough_file = walkthrough_dir / f"{task.instance_id}.json"
 
         generator = WalkthroughGenerator(api_key=os.getenv('ANTHROPIC_API_KEY'))
 
         # Generate walkthrough with snippet resolution
         walkthrough = generator.generate_from_file(
             doc_path=target_doc_path,
-            library_name=task.library_name,
-            task_description=f"Set up {task.library_name} following {task.target_doc}",
+            library_name="FastAPI",
+            task_description=f"Set up FastAPI following {task.target_doc}",
             output_file=walkthrough_file,
             repo_path=repo_dir,
             docs_folder=task.docs_folder
@@ -203,17 +204,24 @@ def main():
     # Save results with full token breakdown (matching past structure: results.json at root)
     results = {
         "experiment_id": experiment_name,
-        "task": task.id,
+        "task": task.instance_id,
         "library": {
-            "name": task.library_name,
-            "version": task.library_version,
+            "name": "FastAPI",
+            "version": "0.100",
             "repo_url": task.repo_url,
             "branch": task.branch,
             "commit": repo_context.commit_hash
         },
         "vanilla": {
             "success": vanilla_result.success,
+            "agent_completed": vanilla_result.agent_completed,
+            "validation_passed": vanilla_result.validation_passed,
             "duration": vanilla_result.duration_seconds,
+            "validation": {
+                "exit_code": vanilla_result.validation_exit_code,
+                "output": vanilla_result.validation_output,
+                "duration": vanilla_result.validation_duration
+            },
             "tokens": {
                 "total": vanilla_result.token_usage.total_tokens,
                 "input": vanilla_result.token_usage.input_tokens,
@@ -230,11 +238,19 @@ def main():
                 "edit": vanilla_result.tool_calls.edit_errors,
                 "glob": vanilla_result.tool_calls.glob_errors,
                 "grep": vanilla_result.tool_calls.grep_errors
-            }
+            },
+            "error_message": vanilla_result.error_message
         },
         "walkthrough": {
             "success": walkthrough_result.success,
+            "agent_completed": walkthrough_result.agent_completed,
+            "validation_passed": walkthrough_result.validation_passed,
             "duration": walkthrough_result.duration_seconds,
+            "validation": {
+                "exit_code": walkthrough_result.validation_exit_code,
+                "output": walkthrough_result.validation_output,
+                "duration": walkthrough_result.validation_duration
+            },
             "tokens": {
                 "total": walkthrough_result.token_usage.total_tokens,
                 "input": walkthrough_result.token_usage.input_tokens,
@@ -251,7 +267,8 @@ def main():
                 "edit": walkthrough_result.tool_calls.edit_errors,
                 "glob": walkthrough_result.tool_calls.glob_errors,
                 "grep": walkthrough_result.tool_calls.grep_errors
-            }
+            },
+            "error_message": walkthrough_result.error_message
         }
     }
 

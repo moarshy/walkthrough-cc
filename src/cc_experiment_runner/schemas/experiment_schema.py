@@ -29,6 +29,7 @@ class Task(BaseModel):
 
     # Repository details
     repo_url: str = Field(description="GitHub repository URL")
+    branch: str = Field(default="main", description="Branch to clone (e.g., 'main', 'master')")
     base_commit: str = Field(description="Specific commit hash for reproducibility")
     language: str = Field(description="Programming language (e.g., 'python', 'javascript')")
 
