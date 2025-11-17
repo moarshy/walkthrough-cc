@@ -44,11 +44,11 @@ task = Task(
     base_commit="d78b5e872c8a9e5f6ccf21932e3e4e0a2b5f4c3d",
     language="python",
     base_image="ubuntu:22.04",
-    problem_statement="Follow the FastAPI First Steps tutorial to create a basic API application.",
+    problem_statement="Create a working FastAPI application that responds to GET requests at the root path (/) with a JSON response containing a 'Hello' and 'World' message.",
     notes="Basic FastAPI app with single GET endpoint at root path",
     docs_folder="docs/en/docs",
     target_doc="tutorial/first-steps.md",
-    success_command="timeout 10 bash -c 'uvicorn main:app --host 0.0.0.0 --port 8000 & sleep 3 && curl -s http://localhost:8000 | grep -q \"Hello.*World\" && killall -9 uvicorn' && echo 'Setup successful' || echo 'Setup failed'",
+    success_command="timeout 10 bash -c 'cd project && uvicorn main:app --host 0.0.0.0 --port 8000 & sleep 3 && curl -s http://localhost:8000 | grep -q \"Hello.*World\" && killall -9 uvicorn' && echo 'Setup successful' || echo 'Setup failed'",
     timeout_seconds=300
 )
 

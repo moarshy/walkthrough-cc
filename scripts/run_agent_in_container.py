@@ -85,25 +85,19 @@ if __name__ == "__main__":
             print(f"   Cleaning up background processes...")
 
             cleanup_command = """
-# Kill all background jobs started during agent execution
-# This finds processes that are detached (no controlling terminal) or running as background jobs
-# Works for: web servers (uvicorn, gunicorn, node, rails), databases, daemons, etc.
+# Kill all background processes started during agent execution
+# Generic approach: Works for uvicorn, node, rails, django, flask, etc.
 
-# Get list of background bash shells (from run_in_background tools)
-BG_SHELLS=$(jobs -p 2>/dev/null || true)
-
-# Kill background shells and their entire process trees
-for pid in $BG_SHELLS; do
-    if [ -n "$pid" ] && kill -0 $pid 2>/dev/null; then
-        # Kill entire process tree (parent + all children)
-        pkill -9 -P $pid 2>/dev/null || true
-        kill -9 $pid 2>/dev/null || true
-    fi
+# Kill any processes listening on common development ports
+# This catches web servers regardless of how they were started
+for port in 8000 8080 3000 3001 4200 5000 8888; do
+    lsof -ti:$port 2>/dev/null | xargs -r kill -9 2>/dev/null || true
 done
 
-# Also kill any processes listening on network ports (likely servers)
-# This catches servers that might not be direct children of bash
-lsof -ti:8000-8999 2>/dev/null | xargs -r kill -9 2>/dev/null || true
+# Also try to kill common server processes by name
+pkill -9 -f "uvicorn|gunicorn|flask|fastapi|django" 2>/dev/null || true
+pkill -9 -f "node.*server|npm.*start" 2>/dev/null || true
+pkill -9 -f "rails.*server" 2>/dev/null || true
 
 sleep 1
 """

@@ -45,6 +45,22 @@ GUIDELINES:
 - Be adaptive: If something fails, try alternative approaches
 - Be validating: Confirm the project actually works (server responds, tests pass, etc.)
 
+WORKSPACE MANAGEMENT:
+⚠️ IMPORTANT: You are working in a cloned repository that contains the library's SOURCE CODE and documentation.
+To avoid conflicts with the library's own files, you MUST:
+1. Create a NEW subdirectory called 'project/' for your work
+2. Do ALL your work inside the 'project/' directory
+3. NEVER create files in the repository root (it contains the library source)
+
+Example structure:
+/workspace/repo/
+├── [library source code files]  ← DO NOT MODIFY
+├── docs/                         ← READ for learning
+└── project/                      ← YOUR WORK GOES HERE
+    ├── main.py
+    ├── requirements.txt
+    └── [your other files]
+
 SUCCESS CRITERIA:
 - All installation steps completed
 - Project builds successfully (if applicable)
@@ -57,11 +73,16 @@ USER_PROMPT = """Please set up the {library_name} v{library_version} project.
 CONTEXT:
 - Documentation location: /workspace/docs
 - Target documentation file: /workspace/docs/{target_doc}
-- Working directory: /workspace/repo
+- Repository root: /workspace/repo (contains library source code)
+- Your workspace: /workspace/repo/project (create this directory)
 
 TASK:
-Read the documentation at /workspace/docs/{target_doc} and follow all the setup steps to get the project running.
-Execute all necessary commands, verify your work, and report the results.
+1. Create a 'project/' directory in /workspace/repo for your work
+2. Read the documentation at /workspace/docs/{target_doc}
+3. Follow all setup steps inside the 'project/' directory
+4. Execute all necessary commands, verify your work, and report results
+
+IMPORTANT: Work exclusively in /workspace/repo/project/ to avoid conflicts with the library source code.
 """
 
 

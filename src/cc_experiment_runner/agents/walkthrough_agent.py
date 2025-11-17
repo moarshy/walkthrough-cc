@@ -56,6 +56,22 @@ GUIDELINES:
 - If a step fails, try to diagnose and fix before giving up
 - Validate after each step (check files exist, servers respond, etc.)
 
+WORKSPACE MANAGEMENT:
+⚠️ IMPORTANT: You are working in a cloned repository that contains the library's SOURCE CODE and documentation.
+To avoid conflicts with the library's own files, you MUST:
+1. Create a NEW subdirectory called 'project/' for your work
+2. Do ALL your work inside the 'project/' directory
+3. NEVER create files in the repository root (it contains the library source)
+
+Example structure:
+/workspace/repo/
+├── [library source code files]  ← DO NOT MODIFY
+├── docs/                         ← READ for learning
+└── project/                      ← YOUR WORK GOES HERE
+    ├── main.py
+    ├── requirements.txt
+    └── [your other files]
+
 SUCCESS CRITERIA:
 - All steps completed successfully
 - All validations pass
@@ -67,12 +83,16 @@ USER_PROMPT = """Please set up the {library_name} v{library_version} project usi
 CONTEXT:
 - Walkthrough file: /workspace/walkthrough.json
 - Documentation location: /workspace/docs
-- Working directory: /workspace/repo
+- Repository root: /workspace/repo (contains library source code)
+- Your workspace: /workspace/repo/project (create this directory)
 
 TASK:
-Read the walkthrough at /workspace/walkthrough.json and execute each step in order.
-The walkthrough contains detailed instructions designed specifically for AI agents.
-Execute each step carefully, validate your work after each step, and report the final results.
+1. Create a 'project/' directory in /workspace/repo for your work
+2. Read the walkthrough at /workspace/walkthrough.json
+3. Execute each step in order inside the 'project/' directory
+4. Validate your work after each step and report final results
+
+IMPORTANT: Work exclusively in /workspace/repo/project/ to avoid conflicts with the library source code.
 """
 
 

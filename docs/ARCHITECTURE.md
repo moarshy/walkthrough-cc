@@ -153,14 +153,28 @@ Host: Parses metrics.json
 **Mounted Volumes:**
 ```python
 volumes = {
-    '/workspace/repo': 'rw',      # Task workspace (agent writes here)
+    '/workspace/repo': 'rw',      # Repository root (contains library source + agent's project/)
     '/workspace/docs': 'ro',      # Documentation (read-only)
     '/workspace/walkthrough.json': 'ro',  # Walkthrough (walkthrough agent only)
     '/logs': 'rw'                 # Logs and results (written by container)
 }
 ```
 
-**Why:** Clean separation between input (docs, walkthrough) and output (logs, workspace changes).
+**Workspace Structure Inside Container:**
+```
+/workspace/repo/
+├── [library source code]  ← Repository files (read-only for agent)
+├── docs/                  ← Documentation (read by agent)
+└── project/               ← Agent's isolated workspace (created by agent)
+    ├── main.py
+    ├── requirements.txt
+    └── [other files]
+```
+
+**Why:**
+- Clean separation between input (docs, walkthrough) and output (logs, workspace changes)
+- Agents work in `project/` subdirectory to avoid conflicts with library source code
+- Generic approach works for any library/framework
 
 ### 4. **Deterministic Validation**
 
@@ -248,15 +262,7 @@ def run_agent(self, task, agent_type, repo_path, docs_path, walkthrough_path, lo
     validation_passed = metrics.get('validation_passed', False)
 ```
 
-#### 3. `ValidationHarness`
-**Location:** `src/cc_experiment_runner/harness/validation_harness.py`
-
-**Responsibilities:**
-- Provides validation infrastructure (both local and Docker modes)
-- Currently **not used** (validation moved to `run_agent_in_container.py`)
-- Kept for reference and potential future standalone validation
-
-**Note:** This component was part of the original architecture but is now superseded by in-container validation.
+**Note:** Validation was previously handled by a separate `ValidationHarness` component, but has been moved into the container for better reproducibility. See `run_agent_in_container.py` for the current implementation.
 
 ### Container Components
 
