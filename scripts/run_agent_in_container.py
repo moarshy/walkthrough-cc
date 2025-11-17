@@ -84,14 +84,18 @@ if __name__ == "__main__":
             # Generic approach: Works for uvicorn, node, rails, django, etc.
             print(f"   Cleaning up background processes...")
 
-            cleanup_command = """
+            cleanup_command = """#!/bin/bash
 # Kill all background processes started during agent execution
 # Generic approach: Works for uvicorn, node, rails, django, flask, etc.
 
 # Kill any processes listening on common development ports
 # This catches web servers regardless of how they were started
+# Note: xargs -r is not portable (GNU vs BSD), so we use explicit check
 for port in 8000 8080 3000 3001 4200 5000 8888; do
-    lsof -ti:$port 2>/dev/null | xargs -r kill -9 2>/dev/null || true
+    pids=$(lsof -ti:$port 2>/dev/null || true)
+    if [ -n "$pids" ]; then
+        echo "$pids" | xargs kill -9 2>/dev/null || true
+    fi
 done
 
 # Also try to kill common server processes by name
@@ -99,24 +103,28 @@ pkill -9 -f "uvicorn|gunicorn|flask|fastapi|django" 2>/dev/null || true
 pkill -9 -f "node.*server|npm.*start" 2>/dev/null || true
 pkill -9 -f "rails.*server" 2>/dev/null || true
 
-sleep 1
+# Wait for ports to be released
+sleep 2
 """
             subprocess.run(
                 cleanup_command,
                 shell=True,
-                cwd="/workspace/repo",
+                cwd="/testbed",
                 capture_output=True,
                 timeout=10
             )
 
-            # Run validation command in /workspace/repo
+            # Run validation command in /testbed with process group isolation
+            # start_new_session=True creates a new process group, preventing
+            # background jobs from persisting beyond the validation command
             validation_result = subprocess.run(
                 success_command,
                 shell=True,
-                cwd="/workspace/repo",
+                cwd="/testbed",
                 capture_output=True,
                 text=True,
-                timeout=300  # 5 minute timeout
+                timeout=300,  # 5 minute timeout
+                start_new_session=True  # Isolate process group for clean cleanup
             )
 
             validation_output = validation_result.stdout + validation_result.stderr
@@ -150,7 +158,7 @@ sleep 1
         f.write("=== Validation Log ===\n")
         f.write(f"Task ID: {task_data.get('instance_id', 'unknown')}\n")
         f.write(f"Command: {success_command}\n")
-        f.write(f"Workspace: /workspace/repo\n")
+        f.write(f"Workspace: /testbed\n")
         f.write(f"Exit Code: {validation_exit_code}\n")
         f.write(f"Success: {validation_passed}\n")
         f.write(f"\n=== Output ===\n")

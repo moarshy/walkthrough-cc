@@ -66,8 +66,9 @@ Both agents run in isolated Docker containers and are validated deterministicall
 │            └──────────┬───────────────┘                          │
 │                       ▼                                          │
 │  ┌────────────────────────────────────────────────────────────┐ │
-│  │  Validation (subprocess.run)                               │ │
-│  │  - Runs success_command in /workspace/repo                 │ │
+│  │  Validation (subprocess.run with start_new_session=True)   │ │
+│  │  - Runs success_command in /testbed                        │ │
+│  │  - Process group isolation prevents background leakage     │ │
 │  │  - Checks for "Setup successful" in output                 │ │
 │  │  - Writes validation.log                                   │ │
 │  └────────────────────────────────────────────────────────────┘ │
@@ -150,45 +151,144 @@ Host: Parses metrics.json
 
 ### 3. **Volume Mounts for Data Exchange**
 
-**Mounted Volumes:**
+**Mounted Volumes (matching SetupBench):**
 ```python
 volumes = {
-    '/workspace/repo': 'rw',      # Repository root (contains library source + agent's project/)
-    '/workspace/docs': 'ro',      # Documentation (read-only)
+    '/testbed': 'rw',              # Agent's workspace (cloned repository)
+    '/workspace/docs': 'ro',       # Documentation (read-only)
     '/workspace/walkthrough.json': 'ro',  # Walkthrough (walkthrough agent only)
-    '/logs': 'rw'                 # Logs and results (written by container)
+    '/logs': 'rw'                  # Logs and results (written by container)
 }
 ```
 
 **Workspace Structure Inside Container:**
 ```
-/workspace/repo/
-├── [library source code]  ← Repository files (read-only for agent)
-├── docs/                  ← Documentation (read by agent)
-└── project/               ← Agent's isolated workspace (created by agent)
-    ├── main.py
-    ├── requirements.txt
-    └── [other files]
+/testbed/                  ← Agent's workspace (working_dir)
+├── main.py               ← Agent creates project files here
+├── requirements.txt
+└── [other files]
+
+/workspace/docs/          ← Documentation (read-only)
+├── tutorial/
+└── [doc files]
+
+/logs/                    ← Results written here
+├── metrics.json
+├── tools.jsonl
+└── validation.log
 ```
 
 **Why:**
-- Clean separation between input (docs, walkthrough) and output (logs, workspace changes)
-- Agents work in `project/` subdirectory to avoid conflicts with library source code
-- Generic approach works for any library/framework
+- Matches SetupBench convention (`/testbed` is standard)
+- Simple structure: agents work directly in `/testbed`
+- Clean separation between input (docs) and output (logs)
+- No nested directories to confuse path handling
 
 ### 4. **Deterministic Validation**
 
 **SetupBench-style validation:**
 ```bash
-success_command = "timeout 300 bash -c 'cd /workspace/repo && source venv/bin/activate && python example.py'"
+success_command = "timeout 10 bash -c 'uvicorn main:app --host 0.0.0.0 --port 8000 </dev/null &>/dev/null & SERVER_PID=$!; sleep 3; curl -s http://localhost:8000 | grep -q \"Hello.*World\"; RESULT=$?; kill -9 $SERVER_PID 2>/dev/null || true; exit $RESULT' && echo 'Setup successful' || echo 'Setup failed'"
 ```
 
 **Success Criteria:** Output contains `"Setup successful"`
+
+**Key Features:**
+- Explicit PID capture: `SERVER_PID=$!` (no reliance on `killall`)
+- Proper cleanup: `kill -9 $SERVER_PID` (kills exact process)
+- Exit code propagation: `exit $RESULT` (proper error handling)
+- Process group isolation: `start_new_session=True` in subprocess.run()
 
 **Why:**
 - Language-agnostic (works for Python, Node.js, etc.)
 - Deterministic (no LLM interpretation)
 - Verifiable (can be re-run independently)
+- Runs in `/testbed` working directory
+
+### 5. **Background Process Cleanup**
+
+**Problem:** Agents may start background servers during testing that interfere with validation.
+
+**Solution:** Two-layer approach (in `run_agent_in_container.py`):
+
+**Layer 1: Aggressive cleanup before validation**
+```bash
+#!/bin/bash
+# Port-based cleanup (portable - no xargs -r)
+for port in 8000 8080 3000 3001 4200 5000 8888; do
+    pids=$(lsof -ti:$port 2>/dev/null || true)
+    if [ -n "$pids" ]; then
+        echo "$pids" | xargs kill -9 2>/dev/null || true
+    fi
+done
+
+# Name-based cleanup
+pkill -9 -f "uvicorn|gunicorn|flask|fastapi|django" 2>/dev/null || true
+pkill -9 -f "node.*server|npm.*start" 2>/dev/null || true
+pkill -9 -f "rails.*server" 2>/dev/null || true
+
+sleep 2  # Wait for ports to be released
+```
+
+**Layer 2: Process group isolation**
+```python
+validation_result = subprocess.run(
+    success_command,
+    shell=True,
+    cwd="/testbed",
+    start_new_session=True  # ← Isolates process group
+)
+```
+
+**Why:**
+- **Portable:** No `xargs -r` (GNU-specific), works on Ubuntu base images
+- **Generic:** Works for any framework (FastAPI, Node.js, Rails, Django, etc.)
+- **Belt-and-suspenders:** Cleanup kills existing processes, process groups prevent new leakage
+- **SetupBench-inspired:** Matches proven validation approach
+
+**Key Fix:** The `xargs -r` flag doesn't exist in Ubuntu's BSD-style xargs, causing cleanup to hang. We now check if PIDs exist before piping to xargs.
+
+### 6. **Global Package Installation (No Virtual Environments)**
+
+**Problem:** If agents create virtual environments and install packages in them, validation (which runs in a fresh shell) can't find those packages.
+
+**Example Failure:**
+```bash
+Agent: cd /testbed && python3 -m venv venv && source venv/bin/activate && pip install fastapi
+# ✅ Agent installs fastapi successfully (in venv)
+
+Validation: cd /testbed && uvicorn main:app
+# ❌ ModuleNotFoundError: No module named 'fastapi' (venv not activated!)
+```
+
+**Solution:** Enforce global package installation in agent prompts and task definitions.
+
+**Agent System Prompt:**
+```
+IMPORTANT CONSTRAINTS:
+⚠️ INSTALL DEPENDENCIES GLOBALLY - DO NOT USE VIRTUAL ENVIRONMENTS
+- You are in a clean, isolated container environment
+- Install all packages globally using pip (e.g., `pip install fastapi`)
+- DO NOT create or use virtual environments (no `python3 -m venv`, no `conda`)
+- This ensures validation can find your installed packages
+
+Rationale: The validation step runs in a fresh shell without activating any venv.
+If you install in a venv, validation will fail with ImportError.
+```
+
+**Task Problem Statement:**
+```
+Constraints:
+- Install all dependencies globally (no virtual environments)
+- Non-interactive setup suitable for headless CI
+- You have root privileges
+```
+
+**Why:**
+- **SetupBench-inspired:** Matches their approach for deterministic validation
+- **Simplicity:** No need to detect and activate venvs before validation
+- **Reliability:** Agent and validation use same Python environment
+- **Container isolation:** We already have process isolation via Docker
 
 ---
 

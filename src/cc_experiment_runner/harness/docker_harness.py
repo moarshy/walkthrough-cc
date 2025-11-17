@@ -85,9 +85,9 @@ class DockerHarness:
         logger.info(f"🐳 Starting {agent_type} agent for task {task.instance_id}")
         logger.info(f"   Container: {container_name}")
 
-        # Setup volumes
+        # Setup volumes (using /testbed matching SetupBench)
         volumes = {
-            str(repo_path.absolute()): {'bind': '/workspace/repo', 'mode': 'rw'},
+            str(repo_path.absolute()): {'bind': '/testbed', 'mode': 'rw'},
             str(docs_path.absolute()): {'bind': '/workspace/docs', 'mode': 'ro'},
             str(log_dir.absolute()): {'bind': '/logs', 'mode': 'rw'},
         }
@@ -131,7 +131,7 @@ class DockerHarness:
                 detach=True,
                 network_mode='bridge',
                 name=container_name,
-                working_dir='/workspace/repo'
+                working_dir='/testbed'  # Matches SetupBench convention
             )
 
             logger.info(f"   Container started: {container.id[:12]}")

@@ -36,7 +36,7 @@ print("="*70)
 print("FULL EXPERIMENT: Vanilla vs Walkthrough")
 print("="*70 + "\n")
 
-# Task definition
+# Task definition (matching SetupBench style)
 task = Task(
     instance_id="fastapi-first-steps",
     repo_url="https://github.com/tiangolo/fastapi",
@@ -44,11 +44,24 @@ task = Task(
     base_commit="d78b5e872c8a9e5f6ccf21932e3e4e0a2b5f4c3d",
     language="python",
     base_image="ubuntu:22.04",
-    problem_statement="Create a working FastAPI application that responds to GET requests at the root path (/) with a JSON response containing a 'Hello' and 'World' message.",
-    notes="Basic FastAPI app with single GET endpoint at root path",
+    problem_statement="""Follow the FastAPI First Steps tutorial to create a basic API application.
+
+Environment: Fresh Ubuntu 22.04 with no preinstalled Python packages.
+
+Constraints:
+- Install all dependencies globally (no virtual environments)
+- Non-interactive setup suitable for headless CI
+- You have root privileges
+
+Task:
+Create a FastAPI application with a single GET endpoint at the root path (/)
+that returns JSON: {"Hello": "World"}
+
+The validation will start the server and test it with curl.""",
+    notes="Basic FastAPI app - tests global installs and simple server validation",
     docs_folder="docs/en/docs",
     target_doc="tutorial/first-steps.md",
-    success_command="timeout 10 bash -c 'cd project && uvicorn main:app --host 0.0.0.0 --port 8000 & sleep 3 && curl -s http://localhost:8000 | grep -q \"Hello.*World\" && killall -9 uvicorn' && echo 'Setup successful' || echo 'Setup failed'",
+    success_command="timeout 10 bash -c 'uvicorn main:app --host 0.0.0.0 --port 8000 </dev/null &>/dev/null & SERVER_PID=$!; sleep 3; curl -s http://localhost:8000 | grep -q \"Hello.*World\"; RESULT=$?; kill -9 $SERVER_PID 2>/dev/null || true; exit $RESULT' && echo 'Setup successful' || echo 'Setup failed'",
     timeout_seconds=300
 )
 

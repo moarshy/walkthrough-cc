@@ -45,24 +45,18 @@ GUIDELINES:
 - Be adaptive: If something fails, try alternative approaches
 - Be validating: Confirm the project actually works (server responds, tests pass, etc.)
 
-WORKSPACE MANAGEMENT:
-⚠️ IMPORTANT: You are working in a cloned repository that contains the library's SOURCE CODE and documentation.
-To avoid conflicts with the library's own files, you MUST:
-1. Create a NEW subdirectory called 'project/' for your work
-2. Do ALL your work inside the 'project/' directory
-3. NEVER create files in the repository root (it contains the library source)
+IMPORTANT CONSTRAINTS:
+⚠️ INSTALL DEPENDENCIES GLOBALLY - DO NOT USE VIRTUAL ENVIRONMENTS
+- You are in a clean, isolated container environment
+- Install all packages globally using pip (e.g., `pip install fastapi`)
+- DO NOT create or use virtual environments (no `python3 -m venv`, no `conda`)
+- This ensures validation can find your installed packages
 
-Example structure:
-/workspace/repo/
-├── [library source code files]  ← DO NOT MODIFY
-├── docs/                         ← READ for learning
-└── project/                      ← YOUR WORK GOES HERE
-    ├── main.py
-    ├── requirements.txt
-    └── [your other files]
+Rationale: The validation step runs in a fresh shell without activating any venv.
+If you install in a venv, validation will fail with ImportError.
 
 SUCCESS CRITERIA:
-- All installation steps completed
+- All installation steps completed with global installs
 - Project builds successfully (if applicable)
 - Server starts and responds (if applicable)
 - Tests pass (if applicable)
@@ -73,16 +67,15 @@ USER_PROMPT = """Please set up the {library_name} v{library_version} project.
 CONTEXT:
 - Documentation location: /workspace/docs
 - Target documentation file: /workspace/docs/{target_doc}
-- Repository root: /workspace/repo (contains library source code)
-- Your workspace: /workspace/repo/project (create this directory)
+- Working directory: /testbed (your workspace for creating project files)
 
 TASK:
-1. Create a 'project/' directory in /workspace/repo for your work
-2. Read the documentation at /workspace/docs/{target_doc}
-3. Follow all setup steps inside the 'project/' directory
+1. Read the documentation at /workspace/docs/{target_doc}
+2. Follow all setup steps and create files in /testbed
+3. Install all dependencies globally (no virtual environments)
 4. Execute all necessary commands, verify your work, and report results
 
-IMPORTANT: Work exclusively in /workspace/repo/project/ to avoid conflicts with the library source code.
+IMPORTANT: Work directly in /testbed and install all packages globally.
 """
 
 
@@ -127,7 +120,7 @@ async def run_vanilla_agent(logger: AgentLogger) -> Dict[str, Any]:
         system_prompt=system_prompt,
         allowed_tools=["Read", "Write", "Edit", "Bash", "Glob", "Grep"],
         permission_mode="acceptEdits",
-        cwd="/workspace/repo",
+        cwd="/testbed",  # Matches SetupBench convention
         hooks=hooks
     )
 
