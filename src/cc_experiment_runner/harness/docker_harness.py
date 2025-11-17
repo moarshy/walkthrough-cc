@@ -13,7 +13,7 @@ from pathlib import Path
 from typing import Optional, Dict, Any, Literal
 from datetime import datetime
 
-from .schemas_defs import Task, AgentResult, TokenUsage, ToolCallStats
+from ..schemas import Task, AgentResult, TokenUsage, ToolCallStats
 from .validation_harness import ValidationHarness
 
 logger = logging.getLogger(__name__)

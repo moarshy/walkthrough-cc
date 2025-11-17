@@ -21,7 +21,6 @@ from concurrent.futures import ThreadPoolExecutor
 # Import from our cc_experiment_runner package
 from cc_experiment_runner import (
     Task,
-    TaskValidation,
     DockerHarness,
     WalkthroughGenerator,
     RepositoryManager,

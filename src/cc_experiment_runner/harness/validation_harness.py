@@ -10,7 +10,7 @@ import subprocess
 import os
 from pathlib import Path
 from typing import Tuple, Optional
-from .schemas_defs import Task
+from ..schemas import Task
 
 
 class ValidationHarness:

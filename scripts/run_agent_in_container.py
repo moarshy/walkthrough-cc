@@ -32,7 +32,7 @@ if __name__ == "__main__":
     sys.path.insert(0, '/app')
 
     # Import agent components
-    from cc_experiment_runner.agent_hooks import AgentLogger
+    from cc_experiment_runner.hooks import AgentLogger
     from cc_experiment_runner.agents import run_vanilla_agent, run_walkthrough_agent
 
     # Setup logging paths (mounted at /logs in container)

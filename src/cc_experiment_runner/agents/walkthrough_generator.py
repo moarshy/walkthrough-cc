@@ -379,54 +379,42 @@ Documentation content:
 {content}
 ```
 
-Create a walkthrough with the following structure and **USE THE WRITE TOOL** to save it to `{output_file}`:
+SCHEMA REFERENCE:
+The walkthrough structure is defined by the Pydantic schema in:
+`src/cc_experiment_runner/schemas/walkthrough_schema.py`
+
+Key models:
+- Walkthrough: Root object containing metadata and steps
+- WalkthroughMetadata: Metadata about the walkthrough
+- WalkthroughStep: Individual step with content for user and agent
+
+Create a walkthrough following this structure and **USE THE WRITE TOOL** to save it to `{output_file}`:
 
 ```json
-{{
-  "walkthrough": {{
-    "title": "Getting Started with {library_name}",
-    "description": "Step-by-step guide...",
-    "library": "{library_name}",
-    "version": "{library_version}",
-    "createdAt": {created_at},
-    "updatedAt": {updated_at},
-    "originalDocPath": "docs/path/to/doc.md",
-    "generatedBy": "cc-experiment-walkthrough-generator"
-  }},
-  "steps": [
-    {{
-      "displayOrder": 1,
-      "contentForUser": "# Step Title\\n\\nExplanation for the user with markdown formatting...\\n\\n```bash\\ncommand\\n```\\n\\nMore details...",
-      "contextForAgent": "Background info about this step, explaining why it's needed, what it accomplishes, and any important context the agent should understand.",
-      "operationsForAgent": "1. Run: command\\n2. Check output for success indicators\\n3. Verify that X was created\\n4. If error Y occurs, do Z",
-      "introductionForAgent": "This step accomplishes [goal]. The agent should [key action].",
-      "nextStepReference": 2,
-      "createdAt": {step_created_at},
-      "updatedAt": {step_updated_at}
-    }},
-    {{
-      "displayOrder": 2,
-      "contentForUser": "# Another Step\\n\\nMore instructions...",
-      "contextForAgent": "Context for step 2...",
-      "operationsForAgent": "Operations for step 2...",
-      "introductionForAgent": "Purpose of step 2...",
-      "nextStepReference": null,
-      "createdAt": {step_created_at},
-      "updatedAt": {step_updated_at}
-    }}
-  ]
-}}
+{example_json}
 ```
 
-IMPORTANT:
+IMPORTANT REQUIREMENTS:
 - The last step should have `nextStepReference: null`
 - All other steps should reference the next step's displayOrder
-- Use actual timestamps (Unix milliseconds)
+- Use actual timestamps (Unix milliseconds): createdAt={created_at}, updatedAt={updated_at}
 - Be comprehensive - don't skip steps from the documentation
 - Make operations concrete and executable
+
+STEP CONTENT FIELDS (all required):
+- displayOrder: Step number starting from 1
+- contentForUser: Markdown content for users (use proper formatting with ##, ```, etc.)
+- contextForAgent: Background knowledge - why this step matters, what to expect
+- operationsForAgent: Concrete executable operations (numbered list of commands/actions)
+- introductionForAgent: Purpose and goals of this step
+- nextStepReference: Next step's displayOrder or null for last step
+- createdAt, updatedAt: Unix timestamps in milliseconds
+
+WRITE TOOL REQUIREMENTS:
 - **YOU MUST USE THE WRITE TOOL** to save the JSON
 - **CRITICAL**: Use the RELATIVE path: `{output_file}` (NOT an absolute path)
 - This path is relative to your working directory
+- The file will be validated against the schema after writing
 """
 
 
@@ -507,7 +495,7 @@ class WalkthroughGenerator:
         log_dir = output_file.parent / "generation_logs"
         log_dir.mkdir(exist_ok=True)
 
-        from ..agent_hooks import AgentLogger
+        from ..hooks import AgentLogger
         logger = AgentLogger(
             log_file=log_dir / "generator.log",
             tools_log_file=log_dir / "tools.jsonl",
@@ -540,7 +528,7 @@ External code snippets have been automatically resolved and inlined:
             doc_content_info = "Format: plain markdown, no external snippets detected"
 
         # Create Claude SDK client with logging + validation hooks
-        from ..agent_hooks import create_logging_hooks
+        from ..hooks import create_logging_hooks
         from ..hooks import create_walkthrough_generation_hooks
 
         # Combine logging hooks with validation hooks
@@ -580,6 +568,16 @@ External code snippets have been automatically resolved and inlined:
             # Use relative path from experiment root
             relative_output = output_file.relative_to(experiment_root) if output_file.is_relative_to(experiment_root) else f"walkthroughs/{output_file.name}"
 
+            # Generate example JSON from schema utility
+            from ..utils import generate_walkthrough_example
+            example_json = generate_walkthrough_example(
+                library_name=library_name,
+                library_version="latest",
+                created_at=now_ms,
+                updated_at=now_ms,
+                output_file=str(relative_output)
+            )
+
             prompt = GENERATION_PROMPT_TEMPLATE.format(
                 library_name=library_name,
                 library_version="latest",
@@ -587,6 +585,7 @@ External code snippets have been automatically resolved and inlined:
                 doc_location_info=doc_location_info,
                 doc_content_info=doc_content_info,
                 content=doc_content,
+                example_json=example_json,
                 timestamp=now_iso,
                 created_at=now_ms,
                 updated_at=now_ms,

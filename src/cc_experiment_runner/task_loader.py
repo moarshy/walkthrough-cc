@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import List, Dict, Any
 from pydantic import ValidationError
 
-from .schemas_defs import Task
+from .schemas import Task
 
 
 class TaskLoadError(Exception):

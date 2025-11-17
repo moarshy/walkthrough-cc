@@ -16,7 +16,7 @@ from claude_agent_sdk import (
     TextBlock,
 )
 
-from ..agent_hooks import AgentLogger, create_logging_hooks
+from ..hooks import AgentLogger, create_logging_hooks
 
 
 SYSTEM_PROMPT = """You are a software development assistant helping to set up projects based on their documentation.
