@@ -51,16 +51,29 @@ if __name__ == "__main__":
         messages_log_file=messages_log_file
     )
 
-    # Parse task JSON to get success_command
+    # Parse task JSON to get success_command and other metadata
     task_data = json.loads(task_json)
     success_command = task_data.get('success_command', '')
 
-    # Run appropriate agent
+    # Add library name/version if not present (for compatibility with Task schema)
+    if 'library_name' not in task_data:
+        # Extract from repo_url if available (e.g., github.com/owner/library)
+        repo_url = task_data.get('repo_url', '')
+        if repo_url:
+            task_data['library_name'] = repo_url.rstrip('/').split('/')[-1]
+        else:
+            task_data['library_name'] = 'Library'
+    if 'library_version' not in task_data:
+        task_data['library_version'] = '1.0'
+    if 'base_image' not in task_data:
+        task_data['base_image'] = 'ubuntu:22.04'
+
+    # Run appropriate agent with task_data
     print(f"🤖 Running {agent_type} agent...")
     if agent_type == "vanilla":
-        result = asyncio.run(run_vanilla_agent(logger))
+        result = asyncio.run(run_vanilla_agent(logger, task_data))
     else:  # walkthrough
-        result = asyncio.run(run_walkthrough_agent(logger))
+        result = asyncio.run(run_walkthrough_agent(logger, task_data))
 
     # Determine if agent completed successfully
     agent_completed = not result.get('error')

@@ -6,7 +6,7 @@ This agent follows AI-generated step-by-step walkthroughs with detailed context 
 
 import sys
 import os
-from typing import Dict, Any
+from typing import Dict, Any, Optional
 
 from claude_agent_sdk import (
     ClaudeSDKClient,
@@ -19,91 +19,128 @@ from claude_agent_sdk import (
 from ..hooks import AgentLogger, create_logging_hooks
 
 
-SYSTEM_PROMPT = """You are a software development assistant specialized in following structured walkthroughs to set up projects.
+SYSTEM_PROMPT = """You are in a benchmark that evaluates your ability to follow structured walkthroughs and complete setup tasks in a minimal environment.
 
-YOUR ROLE:
-You execute structured walkthroughs that provide detailed, step-by-step guidance for setting up software projects.
+**Environment Details:**
+You are operating inside a fresh {base_image} container with minimal preinstalled tools.
 
-WALKTHROUGH STRUCTURE:
-Each walkthrough contains steps with these fields:
-- contentForUser: User-facing instructions (markdown)
-- contextForAgent: Background knowledge (what to expect, how things work)
-- operationsForAgent: Specific commands and actions to execute
-- introductionForAgent: Purpose and goals of each step
+**Key Constraints:**
+- Install all required dependencies globally using system package managers (apt, pip, npm, etc.)
+- Do NOT create or use virtual environments (no venv, conda, or containerization)
+- Your setup should be non-interactive and suitable for headless CI environments
+- You have root privileges - no need to use sudo
+- Assume minimal preinstalled tools - install everything explicitly
 
-CAPABILITIES:
-- Read: Read files in the workspace
+**Your Task:**
+{problem_statement}
+
+**Walkthrough Structure:**
+You will follow a structured walkthrough JSON file with detailed guidance. Each step contains:
+- **contentForUser**: User-facing instructions (markdown)
+- **contextForAgent**: Background knowledge (what to expect, how things work)
+- **operationsForAgent**: Specific commands and actions to execute
+- **introductionForAgent**: Purpose and goals of each step
+
+**Available Tools:**
+- Read: Read files and walkthrough
 - Write: Create new files
 - Edit: Modify existing files
-- Bash: Run shell commands
+- Bash: Execute shell commands
 - Glob: Find files by pattern
 - Grep: Search file contents
 
-APPROACH:
-1. Read and parse the walkthrough JSON file
+**Approach:**
+1. Read and parse the walkthrough JSON file at /workspace/walkthrough.json
 2. Execute each step in order (by displayOrder)
 3. For each step:
-   - Read the contextForAgent to understand what you're doing
-   - Read the operationsForAgent for specific commands
-   - Execute the operations carefully
-   - Verify success before moving to next step
-4. Report overall success or failure with details
+   - Read contextForAgent to understand what you're doing
+   - Read operationsForAgent for specific commands
+   - Execute operations carefully
+   - Verify success before proceeding
+4. Report overall completion status
 
-GUIDELINES:
-- Follow the walkthrough structure: It's been validated and designed for agents
-- Use operationsForAgent as your primary guide
-- contextForAgent helps you understand WHY you're doing each step
-- If a step fails, try to diagnose and fix before giving up
-- Validate after each step (check files exist, servers respond, etc.)
+**Critical Guidelines:**
+- **Follow the Walkthrough**: It's been validated and designed for agents
+  - Use operationsForAgent as your primary guide
+  - contextForAgent explains WHY you're doing each step
+  - Don't skip steps or deviate from instructions
 
-IMPORTANT CONSTRAINTS:
-⚠️ INSTALL DEPENDENCIES GLOBALLY - DO NOT USE VIRTUAL ENVIRONMENTS
-- You are in a clean, isolated container environment
-- Install all packages globally using pip (e.g., `pip install fastapi`)
-- DO NOT create or use virtual environments (no `python3 -m venv`, no `conda`)
-- This ensures validation can find your installed packages
+- **Persistent Installation**: Everything must persist across shell sessions
+  - Use system package managers (apt-get, pip, npm, etc.)
+  - Install globally, NOT in virtual environments or --user mode
+  - Avoid temporary installations
 
-Rationale: The validation step runs in a fresh shell without activating any venv.
-If you install in a venv, validation will fail with ImportError.
+- **Complete Setup**: Install ALL required tools and dependencies
+  - Runtime dependencies (Python, Node, databases, etc.)
+  - Build tools (compilers, headers, build-essential)
+  - Test frameworks and validation tools
+  - Don't skip anything needed for validation!
 
-SUCCESS CRITERIA:
-- All steps completed successfully with global installs
-- All validations pass
-- Final project is functional (server running, tests passing, etc.)
+- **Verify Your Work**: Test after each step
+  - Run commands in fresh contexts to verify persistence
+  - Ensure each step succeeds before moving to next
+  - Diagnose and fix issues before giving up
+
+**Success Criteria:**
+Your work will be validated by running this command in a fresh shell:
+```
+{success_command}
+```
+
+Ensure this command will succeed after your setup is complete.
 """
 
-USER_PROMPT = """Please set up the {library_name} v{library_version} project using the structured walkthrough.
+USER_PROMPT = """Complete the setup task for {library_name} v{library_version} using the structured walkthrough.
 
-CONTEXT:
-- Walkthrough file: /workspace/walkthrough.json
-- Documentation location: /workspace/docs
-- Working directory: /testbed (your workspace for creating project files)
+**Walkthrough File:**
+/workspace/walkthrough.json
 
-TASK:
+**Working Directory:**
+/testbed (create all project files here)
+
+**Instructions:**
 1. Read the walkthrough at /workspace/walkthrough.json
-2. Execute each step in order, creating files in /testbed
-3. Install all dependencies globally (no virtual environments)
-4. Validate your work after each step and report final results
+2. Execute each step in order (by displayOrder)
+3. Install all dependencies globally (system-wide, no virtual environments)
+4. Create necessary files in /testbed
+5. Validate your work after each step
+6. Report final completion status
 
-IMPORTANT: Work directly in /testbed and install all packages globally.
+Remember: Follow the walkthrough carefully, install everything globally, and work directly in /testbed.
 """
 
 
-async def run_walkthrough_agent(logger: AgentLogger) -> Dict[str, Any]:
+async def run_walkthrough_agent(
+    logger: AgentLogger,
+    task_data: Optional[Dict[str, Any]] = None
+) -> Dict[str, Any]:
     """
     Run the walkthrough agent (structured walkthrough approach).
 
     Args:
         logger: AgentLogger instance for logging
+        task_data: Optional task metadata dictionary
 
     Returns:
         Token usage dictionary with keys: input_tokens, output_tokens,
         cache_creation_input_tokens, cache_read_input_tokens, total_tokens
     """
-    # Get environment variables
-    task_id = os.getenv('TASK_ID', 'unknown')
-    library_name = os.getenv('LIBRARY_NAME', '')
-    library_version = os.getenv('LIBRARY_VERSION', '')
+    # Get task information (from task_data if provided, else environment variables)
+    if task_data:
+        task_id = task_data.get('instance_id', 'unknown')
+        library_name = task_data.get('library_name', 'Library')
+        library_version = task_data.get('library_version', '1.0')
+        base_image = task_data.get('base_image', 'ubuntu:22.04')
+        problem_statement = task_data.get('problem_statement', '')
+        success_command = task_data.get('success_command', '')
+    else:
+        # Fallback to environment variables for backward compatibility
+        task_id = os.getenv('TASK_ID', 'unknown')
+        library_name = os.getenv('LIBRARY_NAME', 'Library')
+        library_version = os.getenv('LIBRARY_VERSION', '1.0')
+        base_image = os.getenv('BASE_IMAGE', 'ubuntu:22.04')
+        problem_statement = os.getenv('PROBLEM_STATEMENT', '')
+        success_command = os.getenv('SUCCESS_COMMAND', '')
 
     print(f"🚀 Starting walkthrough agent")
     print(f"   Task: {task_id}")
@@ -113,8 +150,12 @@ async def run_walkthrough_agent(logger: AgentLogger) -> Dict[str, Any]:
     logger.log_message("Agent started: walkthrough")
     logger.log_message(f"Task: {task_id}")
 
-    # Prepare prompts
-    system_prompt = SYSTEM_PROMPT
+    # Prepare prompts with all template variables
+    system_prompt = SYSTEM_PROMPT.format(
+        base_image=base_image,
+        problem_statement=problem_statement,
+        success_command=success_command
+    )
     user_prompt = USER_PROMPT.format(
         library_name=library_name,
         library_version=library_version
